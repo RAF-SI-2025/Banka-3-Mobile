@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { StatusBar, View, Text } from 'react-native';
+import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { C } from './src/shared/constants/theme';
 import { container } from './src/core/di/container';
 import { Client } from './src/shared/types/models';
 
 import LoginScreen from './src/features/auth/presentation/LoginScreen';
+import ExchangeScreen from './src/features/exchange/presentation/ExchangeScreen';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -18,16 +19,19 @@ export default function App() {
     return true;
   }, []);
 
+  const handleBackFromExchange = useCallback(() => {
+    setIsLoggedIn(false);
+    setUser(null);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
-      {isLoggedIn
-        ? (
-          <View style={{ flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: C.textPrimary, fontSize: 18, fontWeight: '600' }}>Logged in</Text>
-          </View>
-        )
-        : <LoginScreen onLogin={handleLogin} />}
+      {isLoggedIn ? (
+        <ExchangeScreen onBack={handleBackFromExchange} />
+      ) : (
+        <LoginScreen onLogin={handleLogin} />
+      )}
     </SafeAreaProvider>
   );
 }

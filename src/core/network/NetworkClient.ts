@@ -121,7 +121,7 @@ export class NetworkClient {
 
       // Call refresh endpoint WITHOUT auth header (use refresh token in body)
       const headers = await this.getHeaders(true);
-      const response = await fetch(`${this.baseUrl}/token/refresh`, {
+      const response = await fetch(`${this.baseUrl}/api/token/refresh`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ refresh_token: refreshToken }),

@@ -4,22 +4,13 @@ import { NetworkClient } from '../../../core/network/NetworkClient';
 import { tokenStorage } from '../../../core/storage/tokenStorage';
 
 interface LoginApiResponse {
-  accessToken: string;
-  refreshToken: string;
-  permissions: string[];
-}
-
-interface LogoutApiResponse {
-  message: string;
+  access_token: string;
+  refresh_token: string;
 }
 
 interface RefreshApiResponse {
   access_token: string;
   refresh_token: string;
-}
-
-interface PasswordResetResponse {
-  message: string;
 }
 
 export class AuthRepository implements IAuthRepository {
@@ -31,23 +22,22 @@ export class AuthRepository implements IAuthRepository {
       password: params.password,
     });
 
-    await tokenStorage.saveTokens(response.accessToken, response.refreshToken);
+    await tokenStorage.saveTokens(response.access_token, response.refresh_token);
 
-    const user = this.extractUserFromJwt(response.accessToken, params.email);
+    const user = this.extractUserFromJwt(response.access_token, params.email);
 
     return {
       tokens: {
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
       },
       user,
-      permissions: response.permissions,
     };
   }
 
   async logout(): Promise<void> {
     try {
-      await this.client.post<LogoutApiResponse>('/api/logout');
+      await this.client.post('/api/logout');
     } catch (e) {}
     await tokenStorage.clear();
   }
@@ -67,13 +57,13 @@ export class AuthRepository implements IAuthRepository {
   }
 
   async requestPasswordReset(email: string): Promise<void> {
-    await this.client.post<PasswordResetResponse>('/api/password-reset/request', { email });
+    await this.client.post('/api/password-reset/request', { email });
   }
 
   async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
-    await this.client.post<PasswordResetResponse>('/api/password-reset/confirm', {
+    await this.client.post('/api/password-reset/confirm', {
       token,
-      password: newPassword,
+      new_password: newPassword,
     });
   }
 
@@ -94,8 +84,7 @@ export class AuthRepository implements IAuthRepository {
       const parts = token.split('.');
       if (parts.length !== 3) return null;
       const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const decoded = atob(payload);
-      return JSON.parse(decoded);
+      return JSON.parse(atob(payload));
     } catch (e) {
       return null;
     }
@@ -111,7 +100,7 @@ export class AuthRepository implements IAuthRepository {
       id: decoded?.id || decoded?.user_id || decoded?.sub || 0,
       firstName: decoded?.first_name || decoded?.firstName || '',
       lastName: decoded?.last_name || decoded?.lastName || '',
-      dateOfBirth: decoded?.date_of_birth ? new Date(decoded.date_of_birth).getTime() / 1000 : 0,
+      dateOfBirth: decoded?.date_of_birth || 0,
       gender: decoded?.gender || '',
       email: decoded?.email || email,
       phone: decoded?.phone_number || decoded?.phone || '',
