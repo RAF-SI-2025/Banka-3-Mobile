@@ -1,7 +1,7 @@
 param(
   [string]$BaseUrl = "http://localhost:8080",
   [string]$Email = "marko.petrovic@gmail.com",
-  [string]$Password = "Password12",
+  [string]$Password = "Test1234!",
   [int]$ClientId = 1,
   [ValidateSet("TEKUCI", "DEVIZNI", "STEDNI", "POSLOVNI")]
   [string]$AccountType = "TEKUCI",

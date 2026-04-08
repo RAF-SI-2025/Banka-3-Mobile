@@ -153,7 +153,7 @@ export default function App() {
           verified={verificationHandled}
           onShowModal={() => setShowVerificationModal(true)} />;
       case 'profile':
-        return <ProfileScreen onLogout={handleLogout} />;
+        return <ProfileScreen onLogout={handleLogout} user={user} />;
       case 'payment':
         return <PaymentScreen onBack={goBack} />;
       case 'deposit':                                    

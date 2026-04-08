@@ -1,38 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Modal, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Modal, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_ACCOUNTS } from '../../../shared/data/mockData';
 import { fmt } from '../../../shared/utils/formatters';
+import { useLoans } from '../../../shared/hooks/useFeatures';
+import { useAccounts } from '../../../shared/hooks/useFeatures';
+import { Loan } from '../../../shared/types/models';
 
 interface Props { onBack: () => void; }
 
-const MOCK_LOANS = [
-  {
-    id: 1, name: 'Gotovinski kredit', number: '265-KR-0000001234', amount: 500000, currency: 'RSD',
-    period: 60, nominalRate: 8.5, effectiveRate: 9.2, startDate: '15.01.2024', endDate: '15.01.2029',
-    installment: 10245.50, nextPayment: '15.04.2025', remaining: 384200, paid: 115800, accountId: 1,
-    status: 'active' as const,
-  },
-  {
-    id: 2, name: 'Stambeni kredit', number: '265-KR-0000005678', amount: 8500000, currency: 'RSD',
-    period: 240, nominalRate: 4.2, effectiveRate: 4.8, startDate: '01.06.2023', endDate: '01.06.2043',
-    installment: 52340.00, nextPayment: '01.04.2025', remaining: 7842500, paid: 657500, accountId: 1,
-    status: 'active' as const,
-  },
-  {
-    id: 3, name: 'Auto kredit', number: '265-KR-0000009012', amount: 1200000, currency: 'RSD',
-    period: 36, nominalRate: 6.9, effectiveRate: 7.5, startDate: '10.03.2023', endDate: '10.03.2026',
-    installment: 36890.00, nextPayment: '10.04.2025', remaining: 110670, paid: 1089330, accountId: 1,
-    status: 'active' as const,
-  },
-];
-
 const LOAN_TYPES = [
-  { value: 'gotovinski', label: 'Gotovinski kredit' },
-  { value: 'stambeni', label: 'Stambeni kredit' },
-  { value: 'auto', label: 'Auto kredit' },
-  { value: 'refinansirajuci', label: 'Refinansirajući kredit' },
+  { value: 'GOTOVINSKI', label: 'Gotovinski kredit' },
+  { value: 'STAMBENI', label: 'Stambeni kredit' },
+  { value: 'AUTO', label: 'Auto kredit' },
+  { value: 'REFINANSIRAJUCI', label: 'Refinansirajući kredit' },
+  { value: 'STUDENTSKI', label: 'Studentski kredit' },
 ];
 
 const MATURITIES = ['12', '24', '36', '48', '60', '84', '120', '180', '240'];
@@ -40,11 +22,17 @@ const MATURITIES = ['12', '24', '36', '48', '60', '84', '120', '180', '240'];
 type Step = 'list' | 'detail' | 'apply' | 'applyConfirm' | 'applySuccess';
 
 export default function LoansScreen({ onBack }: Props) {
+  const { state: loansState, actions } = useLoans();
+  const { state: accountsState } = useAccounts();
+  const loans = loansState.data ?? [];
+  const accounts = accountsState.data ?? [];
+
   const [step, setStep] = useState<Step>('list');
-  const [selectedLoan, setSelectedLoan] = useState<typeof MOCK_LOANS[0] | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Application form state
-  const [loanType, setLoanType] = useState('gotovinski');
+  const [loanType, setLoanType] = useState('GOTOVINSKI');
   const [loanAmount, setLoanAmount] = useState('');
   const [loanPurpose, setLoanPurpose] = useState('');
   const [salary, setSalary] = useState('');
@@ -52,7 +40,7 @@ export default function LoansScreen({ onBack }: Props) {
   const [employmentYears, setEmploymentYears] = useState('');
   const [maturity, setMaturity] = useState('60');
   const [phone, setPhone] = useState('');
-  const [selectedAccountId, setSelectedAccountId] = useState(MOCK_ACCOUNTS[0].id);
+  const [selectedAccountIdx, setSelectedAccountIdx] = useState(0);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showMaturityPicker, setShowMaturityPicker] = useState(false);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
@@ -70,10 +58,44 @@ export default function LoansScreen({ onBack }: Props) {
   };
 
   const resetForm = () => {
-    setLoanType('gotovinski'); setLoanAmount(''); setLoanPurpose(''); setSalary('');
+    setLoanType('GOTOVINSKI'); setLoanAmount(''); setLoanPurpose(''); setSalary('');
     setPermanent(true); setEmploymentYears(''); setMaturity('60'); setPhone('');
     setErrors({});
   };
+
+  const handleSubmit = async () => {
+    const acc = accounts[selectedAccountIdx];
+    if (!acc) return;
+    setSubmitting(true);
+    try {
+      await actions.apply({
+        loanType,
+        amount: parseFloat(loanAmount),
+        currency: 'RSD',
+        purpose: loanPurpose,
+        monthlySalary: parseFloat(salary),
+        permanentEmployment: permanent,
+        employmentYears: parseInt(employmentYears) || 0,
+        maturityMonths: parseInt(maturity),
+        accountNumber: acc.accountNumber,
+        phone,
+      });
+      setStep('applySuccess');
+    } catch (e: any) {
+      setErrors({ submit: e.message || 'Greška pri slanju zahteva' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ===== LOADING =====
+  if (loansState.loading && loans.length === 0) {
+    return (
+      <View style={[styles.flex1, styles.center]}>
+        <ActivityIndicator size="large" color={C.accent} />
+      </View>
+    );
+  }
 
   // ===== SUCCESS =====
   if (step === 'applySuccess') {
@@ -87,22 +109,26 @@ export default function LoansScreen({ onBack }: Props) {
           <View style={styles.sRow}><Text style={styles.sLabel}>Iznos</Text><Text style={[styles.sVal, { color: C.accent }]}>{fmt(parseFloat(loanAmount))}</Text></View>
           <View style={styles.sRow}><Text style={styles.sLabel}>Ročnost</Text><Text style={styles.sVal}>{maturity} meseci</Text></View>
         </View>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setStep('list'); }}><Text style={styles.primaryBtnText}>Nazad na kredite</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setStep('list'); }}>
+          <Text style={styles.primaryBtnText}>Nazad na kredite</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   // ===== CONFIRM =====
   if (step === 'applyConfirm') {
-    const acc = MOCK_ACCOUNTS.find(a => a.id === selectedAccountId)!;
+    const acc = accounts[selectedAccountIdx];
     return (
       <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }}>
         <View style={styles.hRow}>
-          <TouchableOpacity onPress={() => setStep('apply')} style={styles.backBtn}><Ionicons name="chevron-back" size={20} color={C.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setStep('apply')} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={20} color={C.textSecondary} />
+          </TouchableOpacity>
           <Text style={styles.title}>Potvrda zahteva</Text>
         </View>
         <View style={styles.confirmCard}>
-          {[
+          {([
             ['Tip kredita', LOAN_TYPES.find(t => t.value === loanType)?.label || ''],
             ['Iznos', fmt(parseFloat(loanAmount))],
             ['Svrha', loanPurpose],
@@ -110,17 +136,30 @@ export default function LoansScreen({ onBack }: Props) {
             ['Stalni radni odnos', permanent ? 'Da' : 'Ne'],
             ['Period zaposlenja', `${employmentYears} god.`],
             ['Ročnost', `${maturity} meseci`],
-            ['Račun', `${acc.name} (${acc.number})`],
+            ['Račun', acc ? `${acc.name} (${acc.accountNumber})` : '-'],
             ['Telefon', phone],
-          ].map(([l, v], i) => (
+          ] as [string, string][]).map(([l, v], i) => (
             <View key={l} style={[styles.cRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
-              <Text style={styles.cLabel}>{l}</Text><Text style={styles.cVal}>{v}</Text>
+              <Text style={styles.cLabel}>{l}</Text>
+              <Text style={styles.cVal}>{v}</Text>
             </View>
           ))}
         </View>
+        {errors.submit && <Text style={[styles.errText, { marginBottom: 12 }]}>{errors.submit}</Text>}
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <TouchableOpacity style={styles.secBtn} onPress={() => setStep('apply')}><Text style={styles.secBtnText}>Nazad</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.primaryBtn, { flex: 1.5 }]} onPress={() => setStep('applySuccess')}><Text style={styles.primaryBtnText}>Pošalji zahtev</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.secBtn} onPress={() => setStep('apply')}>
+            <Text style={styles.secBtnText}>Nazad</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 1.5 }, submitting && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.primaryBtnText}>Pošalji zahtev</Text>
+            }
+          </TouchableOpacity>
         </View>
       </ScrollView>
     );
@@ -128,21 +167,22 @@ export default function LoansScreen({ onBack }: Props) {
 
   // ===== APPLICATION FORM =====
   if (step === 'apply') {
+    const selectedAcc = accounts[selectedAccountIdx];
     return (
       <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.hRow}>
-          <TouchableOpacity onPress={() => setStep('list')} style={styles.backBtn}><Ionicons name="chevron-back" size={20} color={C.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setStep('list')} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={20} color={C.textSecondary} />
+          </TouchableOpacity>
           <Text style={styles.title}>Zahtev za kredit</Text>
         </View>
 
-        {/* Loan type */}
         <Text style={styles.label}>VRSTA KREDITA</Text>
         <TouchableOpacity style={styles.selectBtn} onPress={() => setShowTypePicker(true)}>
           <Text style={styles.selectMain}>{LOAN_TYPES.find(t => t.value === loanType)?.label}</Text>
           <Ionicons name="chevron-down" size={18} color={C.textMuted} />
         </TouchableOpacity>
 
-        {/* Amount */}
         <Text style={[styles.label, { marginTop: 16 }]}>IZNOS KREDITA</Text>
         <View style={styles.inputWrap}>
           <TextInput style={styles.input} value={loanAmount} onChangeText={setLoanAmount} placeholder="0.00" placeholderTextColor={C.textMuted} keyboardType="decimal-pad" />
@@ -150,14 +190,12 @@ export default function LoansScreen({ onBack }: Props) {
         </View>
         {errors.amount && <Text style={styles.errText}>{errors.amount}</Text>}
 
-        {/* Purpose */}
         <Text style={[styles.label, { marginTop: 16 }]}>SVRHA KREDITA</Text>
         <View style={styles.inputWrap}>
           <TextInput style={[styles.input, { minHeight: 50, textAlignVertical: 'top' }]} value={loanPurpose} onChangeText={setLoanPurpose} placeholder="Opis svrhe kredita" placeholderTextColor={C.textMuted} multiline />
         </View>
         {errors.purpose && <Text style={styles.errText}>{errors.purpose}</Text>}
 
-        {/* Salary */}
         <Text style={[styles.label, { marginTop: 16 }]}>IZNOS MESEČNIH PRIMANJA</Text>
         <View style={styles.inputWrap}>
           <TextInput style={styles.input} value={salary} onChangeText={setSalary} placeholder="0.00" placeholderTextColor={C.textMuted} keyboardType="decimal-pad" />
@@ -165,7 +203,6 @@ export default function LoansScreen({ onBack }: Props) {
         </View>
         {errors.salary && <Text style={styles.errText}>{errors.salary}</Text>}
 
-        {/* Permanent employment toggle */}
         <Text style={[styles.label, { marginTop: 16 }]}>RADNI ODNOS</Text>
         <View style={styles.toggleRow}>
           {['Da', 'Ne'].map(opt => (
@@ -178,28 +215,26 @@ export default function LoansScreen({ onBack }: Props) {
           ))}
         </View>
 
-        {/* Employment period */}
         <Text style={[styles.label, { marginTop: 16 }]}>PERIOD ZAPOSLENJA (godine)</Text>
         <View style={styles.inputWrap}>
           <TextInput style={styles.input} value={employmentYears} onChangeText={setEmploymentYears} placeholder="npr. 3" placeholderTextColor={C.textMuted} keyboardType="numeric" />
         </View>
         {errors.employment && <Text style={styles.errText}>{errors.employment}</Text>}
 
-        {/* Maturity */}
         <Text style={[styles.label, { marginTop: 16 }]}>ROČNOST (meseci)</Text>
         <TouchableOpacity style={styles.selectBtn} onPress={() => setShowMaturityPicker(true)}>
           <Text style={styles.selectMain}>{maturity} meseci</Text>
           <Ionicons name="chevron-down" size={18} color={C.textMuted} />
         </TouchableOpacity>
 
-        {/* Account */}
         <Text style={[styles.label, { marginTop: 16 }]}>RAČUN ZA ISPLATU</Text>
         <TouchableOpacity style={styles.selectBtn} onPress={() => setShowAccountPicker(true)}>
-          <Text style={styles.selectMain}>{MOCK_ACCOUNTS.find(a => a.id === selectedAccountId)?.name} ({MOCK_ACCOUNTS.find(a => a.id === selectedAccountId)?.number})</Text>
+          <Text style={styles.selectMain}>
+            {selectedAcc ? `${selectedAcc.name} (${selectedAcc.accountNumber})` : 'Izaberite račun'}
+          </Text>
           <Ionicons name="chevron-down" size={18} color={C.textMuted} />
         </TouchableOpacity>
 
-        {/* Phone */}
         <Text style={[styles.label, { marginTop: 16 }]}>BROJ TELEFONA</Text>
         <View style={styles.inputWrap}>
           <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="+381..." placeholderTextColor={C.textMuted} keyboardType="phone-pad" />
@@ -210,7 +245,6 @@ export default function LoansScreen({ onBack }: Props) {
           <Text style={styles.primaryBtnText}>Nastavi</Text>
         </TouchableOpacity>
 
-        {/* Pickers */}
         <BottomSheet visible={showTypePicker} onClose={() => setShowTypePicker(false)} title="Vrsta kredita">
           {LOAN_TYPES.map(t => (
             <TouchableOpacity key={t.value} style={styles.sheetItem} onPress={() => { setLoanType(t.value); setShowTypePicker(false); }}>
@@ -230,13 +264,13 @@ export default function LoansScreen({ onBack }: Props) {
         </BottomSheet>
 
         <BottomSheet visible={showAccountPicker} onClose={() => setShowAccountPicker(false)} title="Račun">
-          {MOCK_ACCOUNTS.map(a => (
-            <TouchableOpacity key={a.id} style={styles.sheetItem} onPress={() => { setSelectedAccountId(a.id); setShowAccountPicker(false); }}>
+          {accounts.map((a, idx) => (
+            <TouchableOpacity key={a.accountNumber} style={styles.sheetItem} onPress={() => { setSelectedAccountIdx(idx); setShowAccountPicker(false); }}>
               <View style={styles.flex1}>
                 <Text style={styles.sheetItemText}>{a.name}</Text>
-                <Text style={{ color: C.textMuted, fontSize: 12 }}>{a.number}</Text>
+                <Text style={{ color: C.textMuted, fontSize: 12 }}>{a.accountNumber}</Text>
               </View>
-              {selectedAccountId === a.id && <Ionicons name="checkmark" size={18} color={C.primary} />}
+              {selectedAccountIdx === idx && <Ionicons name="checkmark" size={18} color={C.primary} />}
             </TouchableOpacity>
           ))}
         </BottomSheet>
@@ -247,15 +281,16 @@ export default function LoansScreen({ onBack }: Props) {
   // ===== DETAIL =====
   if (step === 'detail' && selectedLoan) {
     const l = selectedLoan;
-    const progressPct = Math.round((l.paid / l.amount) * 100);
+    const progressPct = l.amount > 0 ? Math.min(100, Math.round((l.paid / l.amount) * 100)) : 0;
     return (
       <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
         <View style={styles.hRow}>
-          <TouchableOpacity onPress={() => setStep('list')} style={styles.backBtn}><Ionicons name="chevron-back" size={20} color={C.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setStep('list')} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={20} color={C.textSecondary} />
+          </TouchableOpacity>
           <Text style={styles.title}>{l.name}</Text>
         </View>
 
-        {/* Progress card */}
         <View style={styles.progressCard}>
           <Text style={styles.progressLabel}>Otplaćeno</Text>
           <Text style={styles.progressPct}>{progressPct}%</Text>
@@ -268,7 +303,6 @@ export default function LoansScreen({ onBack }: Props) {
           </View>
         </View>
 
-        {/* Next payment */}
         <View style={styles.nextPayment}>
           <View style={styles.npIcon}><Ionicons name="calendar" size={20} color={C.warning} /></View>
           <View style={styles.flex1}>
@@ -278,20 +312,19 @@ export default function LoansScreen({ onBack }: Props) {
           <Text style={styles.npAmount}>{fmt(l.installment, l.currency)}</Text>
         </View>
 
-        {/* Detail info */}
         <View style={styles.detailCard}>
-          {[
+          {([
             ['Broj kredita', l.number],
             ['Iznos kredita', fmt(l.amount, l.currency)],
             ['Period otplate', `${l.period} meseci`],
             ['Nominalna kamatna stopa', `${l.nominalRate}%`],
-            ['Efektivna kamatna stopa', `${l.effectiveRate}%`],
+            ['Efektivna kamatna stopa', `${l.effectiveRate.toFixed(2)}%`],
             ['Datum ugovaranja', l.startDate],
             ['Datum dospeća', l.endDate],
             ['Iznos rate', fmt(l.installment, l.currency)],
             ['Preostalo dugovanje', fmt(l.remaining, l.currency)],
             ['Valuta', l.currency],
-          ].map(([label, value], i) => (
+          ] as [string, string][]).map(([label, value], i) => (
             <View key={label} style={[styles.dRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
               <Text style={styles.dLabel}>{label}</Text>
               <Text style={styles.dValue}>{value}</Text>
@@ -306,11 +339,12 @@ export default function LoansScreen({ onBack }: Props) {
   return (
     <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
       <View style={styles.hRow}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}><Ionicons name="chevron-back" size={20} color={C.textSecondary} /></TouchableOpacity>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={20} color={C.textSecondary} />
+        </TouchableOpacity>
         <Text style={styles.title}>Krediti</Text>
       </View>
 
-      {/* Apply button */}
       <TouchableOpacity style={styles.applyBanner} onPress={() => { resetForm(); setStep('apply'); }} activeOpacity={0.8}>
         <Ionicons name="add-circle" size={24} color="#fff" />
         <View style={styles.flex1}>
@@ -320,16 +354,38 @@ export default function LoansScreen({ onBack }: Props) {
         <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
 
-      <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 14 }]}>Aktivni krediti</Text>
-      {MOCK_LOANS.map(loan => {
-        const pct = Math.round((loan.paid / loan.amount) * 100);
+      {loansState.error && (
+        <View style={{ alignItems: 'center', marginTop: 40 }}>
+          <Ionicons name="alert-circle-outline" size={40} color={C.danger} />
+          <Text style={{ color: C.textSecondary, marginTop: 8 }}>{loansState.error}</Text>
+        </View>
+      )}
+
+      {loans.length === 0 && !loansState.loading && !loansState.error && (
+        <View style={{ alignItems: 'center', marginTop: 60 }}>
+          <Ionicons name="document-text-outline" size={48} color={C.textMuted} />
+          <Text style={{ color: C.textMuted, marginTop: 12 }}>Nema aktivnih kredita</Text>
+        </View>
+      )}
+
+      {loans.length > 0 && (
+        <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 14 }]}>Aktivni krediti</Text>
+      )}
+
+      {loans.map(loan => {
+        const pct = loan.amount > 0 ? Math.min(100, Math.round((loan.paid / loan.amount) * 100)) : 0;
         return (
-          <TouchableOpacity key={loan.id} style={styles.loanRow} onPress={() => { setSelectedLoan(loan); setStep('detail'); }} activeOpacity={0.7}>
-            <View style={styles.loanIconWrap}><Ionicons name="document-text" size={22} color={C.primary} /></View>
+          <TouchableOpacity key={loan.number || loan.id} style={styles.loanRow}
+            onPress={() => { setSelectedLoan(loan); setStep('detail'); }} activeOpacity={0.7}>
+            <View style={styles.loanIconWrap}>
+              <Ionicons name="document-text" size={22} color={C.primary} />
+            </View>
             <View style={styles.flex1}>
               <Text style={styles.loanName}>{loan.name}</Text>
               <Text style={styles.loanNum}>{loan.number}</Text>
-              <View style={styles.miniBar}><View style={[styles.miniFill, { width: `${pct}%` }]} /></View>
+              <View style={styles.miniBar}>
+                <View style={[styles.miniFill, { width: `${pct}%` }]} />
+              </View>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.loanAmount}>{fmt(loan.remaining, loan.currency)}</Text>
@@ -343,7 +399,6 @@ export default function LoansScreen({ onBack }: Props) {
   );
 }
 
-// Reusable bottom sheet
 function BottomSheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -382,11 +437,9 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secBtn: { flex: 1, backgroundColor: C.bgCard, borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: C.border },
   secBtnText: { color: C.textSecondary, fontSize: 15, fontWeight: '600' },
-  // Banner
   applyBanner: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: C.primary, borderRadius: 18, padding: 18, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
   bannerTitle: { color: '#fff', fontSize: 15, fontWeight: '600' },
   bannerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
-  // Loan list
   loanRow: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: C.bgCard, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
   loanIconWrap: { width: 46, height: 46, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   loanName: { color: C.textPrimary, fontSize: 15, fontWeight: '600' },
@@ -395,7 +448,6 @@ const styles = StyleSheet.create({
   loanSub: { color: C.textMuted, fontSize: 10, marginTop: 1 },
   miniBar: { height: 4, backgroundColor: C.border, borderRadius: 2, marginTop: 8 },
   miniFill: { height: 4, backgroundColor: C.accent, borderRadius: 2 },
-  // Detail
   progressCard: { backgroundColor: C.bgCard, borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
   progressLabel: { color: C.textSecondary, fontSize: 13 },
   progressPct: { color: C.accent, fontSize: 36, fontWeight: '800', letterSpacing: -1, marginVertical: 4 },
@@ -412,19 +464,16 @@ const styles = StyleSheet.create({
   dRow: { padding: 14, paddingHorizontal: 18 },
   dLabel: { color: C.textMuted, fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
   dValue: { color: C.textPrimary, fontSize: 14, fontWeight: '500', marginTop: 4 },
-  // Confirm
   confirmCard: { backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, overflow: 'hidden', marginBottom: 20 },
   cRow: { padding: 14, paddingHorizontal: 18 },
   cLabel: { color: C.textMuted, fontSize: 11, fontWeight: '500', textTransform: 'uppercase' },
   cVal: { color: C.textPrimary, fontSize: 14, fontWeight: '500', marginTop: 4 },
-  // Success
   successTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   successSub: { color: C.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
   card: { backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 18, width: '100%', marginBottom: 24 },
   sRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   sLabel: { color: C.textMuted, fontSize: 13 },
   sVal: { color: C.textPrimary, fontSize: 13, fontWeight: '600' },
-  // Modals
   mOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   mSheet: { backgroundColor: C.bgCard, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '60%' },
   mHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },

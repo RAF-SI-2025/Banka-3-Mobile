@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
 
 export default function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) => Promise<boolean> }) {
-  const [email, setEmail] = useState('marko.petrovic@gmail.com');
-  const [password, setPassword] = useState('Password12');
+  const [email, setEmail] = useState('petar@primer.raf');
+  const [password, setPassword] = useState('Test1234!');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

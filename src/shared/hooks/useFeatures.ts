@@ -127,13 +127,13 @@ export function useCards() {
     } catch (e: any) { dispatch({ type: 'ERROR', error: e.message }); }
   }, [repo]);
 
-  const blockCard = useCallback(async (id: number) => {
-    await repo.blockCard(id);
+  const blockCard = useCallback(async (cardNumber: string) => {
+    await repo.blockCard(cardNumber);
     fetch();
   }, [repo, fetch]);
 
-  const unblockCard = useCallback(async (id: number) => {
-    await repo.unblockCard(id);
+  const unblockCard = useCallback(async (cardNumber: string) => {
+    await repo.unblockCard(cardNumber);
     fetch();
   }, [repo, fetch]);
 

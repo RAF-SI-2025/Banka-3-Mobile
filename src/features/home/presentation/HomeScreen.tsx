@@ -2,18 +2,19 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_USER } from '../../../shared/data/mockData';
 import { fmt } from '../../../shared/utils/formatters';
 import { useAccounts, useTransactions } from '../../../shared/hooks/useFeatures';
+import { Client } from '../../../shared/types/models';
 
 interface Props {
   hasNotif: boolean;
+  user: Client | null;
   onOpenAccount: (id: number) => void;
   onShowAllAccounts: () => void;
   onNavigate: (screen: string) => void;
 }
 
-export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts, onNavigate }: Props) {
+export default function HomeScreen({ hasNotif, user, onOpenAccount, onShowAllAccounts, onNavigate }: Props) {
   const { state: accountsState } = useAccounts();
   const accounts = accountsState.data ?? [];
   const main = accounts[0];
@@ -24,8 +25,8 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
     <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20, paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Dobro dosli</Text>
-          <Text style={styles.name}>{MOCK_USER.firstName} {MOCK_USER.lastName}</Text>
+          <Text style={styles.greeting}>Dobro došli</Text>
+          <Text style={styles.name}>{user?.firstName} {user?.lastName}</Text>
         </View>
         <TouchableOpacity style={styles.bellWrap} onPress={() => onNavigate('verify')}>
           <Ionicons name="notifications-outline" size={22} color={C.textSecondary} />
@@ -39,12 +40,12 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
           <View style={styles.circle2} />
           <Text style={styles.balanceLabel}>Ukupno stanje</Text>
           <Text style={styles.balanceAmount}>{fmt(main.balance, main.currency)}</Text>
-          <Text style={styles.balanceAvail}>Raspolozivo: {fmt(main.availableBalance, main.currency)}</Text>
+          <Text style={styles.balanceAvail}>Raspoloživo: {fmt(main.availableBalance, main.currency)}</Text>
 
           <View style={styles.quickRow}>
             {[
               { icon: 'arrow-up' as const, label: 'Uplata', target: 'deposit' },
-              { icon: 'send' as const, label: 'Placanje', target: 'payment' },
+              { icon: 'send' as const, label: 'Plaćanje', target: 'payment' },
               { icon: 'swap-horizontal' as const, label: 'Prenos', target: 'transfer' },
             ].map(({ icon, label, target }) => (
               <TouchableOpacity key={label} style={styles.quickBtn} activeOpacity={0.7} onPress={() => onNavigate(target)}>
@@ -57,8 +58,8 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
       )}
 
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>Moji racuni</Text>
-        <TouchableOpacity onPress={onShowAllAccounts}><Text style={styles.sectionLink}>Prikazi sve</Text></TouchableOpacity>
+        <Text style={styles.sectionTitle}>Moji računi</Text>
+        <TouchableOpacity onPress={onShowAllAccounts}><Text style={styles.sectionLink}>Prikaži sve</Text></TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }}>
         {accounts.map((account, index) => (
@@ -75,9 +76,9 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
       <View style={styles.menuGrid}>
         {[
           { icon: 'card-outline' as const, label: 'Kartice', target: 'cards' },
-          { icon: 'swap-horizontal-outline' as const, label: 'Menjacnica', target: 'exchange' },
+          { icon: 'swap-horizontal-outline' as const, label: 'Menjačnica', target: 'exchange' },
           { icon: 'cash-outline' as const, label: 'Krediti', target: 'loans' },
-          { icon: 'receipt-outline' as const, label: 'Placanja', target: 'paymentHistory' },
+          { icon: 'receipt-outline' as const, label: 'Plaćanja', target: 'paymentHistory' },
           { icon: 'people-outline' as const, label: 'Primaoci', target: 'recipients' },
           { icon: 'shield-checkmark-outline' as const, label: 'Verifikacija', target: 'verify' },
         ].map(({ icon, label, target }) => (
@@ -102,12 +103,23 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
             <Text style={styles.txDesc} numberOfLines={1}>{transaction.description}</Text>
             <Text style={styles.txDate}>{transaction.date}</Text>
           </View>
-          <Text style={[styles.txAmt, transaction.amount > 0 && { color: C.accent }]}>
-            {transaction.amount > 0 ? '+' : ''}
-            {fmt(transaction.amount, transaction.currency)}
-          </Text>
-        </View>
-      ))}
+          {transactions.map((transaction, i) => (
+            <View key={`${transaction.id}-${i}`} style={styles.txRow}>
+              <View style={[styles.txIcon, { backgroundColor: transaction.amount > 0 ? C.accentGlow : C.dangerGlow }]}>
+                <Ionicons name={transaction.amount > 0 ? 'arrow-down' : 'arrow-up'} size={18} color={transaction.amount > 0 ? C.accent : C.danger} />
+              </View>
+              <View style={styles.flex1}>
+                <Text style={styles.txDesc} numberOfLines={1}>{transaction.description}</Text>
+                <Text style={styles.txDate}>{transaction.date}</Text>
+              </View>
+              <Text style={[styles.txAmt, transaction.amount > 0 && { color: C.accent }]}>
+                {transaction.amount > 0 ? '+' : ''}
+                {fmt(transaction.amount, transaction.currency)}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }

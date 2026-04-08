@@ -1,4 +1,3 @@
-
 export interface Client {
   id: number;
   firstName: string;
@@ -69,11 +68,11 @@ export type CardType = 'debit' | 'credit';
 export type CardStatus = 'active' | 'blocked' | 'deactivated';
 
 export interface Card {
-  id: number;
+  id: string;
   cardNumber: string;
   cardName: string;
   cardType: CardType;
-  accountId: number;
+  accountId: string;
   expiresAt: string;
   limit: number;
   status: CardStatus;
@@ -110,7 +109,7 @@ export interface LoanApplication {
   permanentEmployment: boolean;
   employmentYears: number;
   maturityMonths: number;
-  accountId: number;
+  accountNumber: string;  // account_number string, ne numeric id
   phone: string;
 }
 
