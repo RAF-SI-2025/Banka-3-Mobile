@@ -1,7 +1,7 @@
 import { tokenStorage } from '../storage/tokenStorage';
 
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://10.169.213.174:8080', //http://192.168.1.102:8080
+  BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://192.168.1.102:8080', // 'http://10.169.213.174:8080'
   USE_MOCK: false,
   TIMEOUT: 10000,
 };

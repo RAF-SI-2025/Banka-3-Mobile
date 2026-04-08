@@ -17,6 +17,17 @@ interface RefreshApiResponse {
   refreshToken?: string;
 }
 
+interface ClientApiResponse {
+  id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth: number;
+  gender: string;
+  email: string;
+  phone_number: string;
+  address: string;
+}
+
 export class AuthRepository implements IAuthRepository {
   constructor(private client: NetworkClient) {}
 
@@ -34,15 +45,16 @@ export class AuthRepository implements IAuthRepository {
 
     await tokenStorage.saveTokens(accessToken, refreshToken);
 
-    const user = this.extractUserFromJwt(accessToken, params.email);
+    // Fetchuj prave podatke sa /api/clients/me
+    let user: Client;
+    try {
+      user = await this.getCurrentUser();
+    } catch {
+      // Fallback na JWT ako /clients/me ne radi
+      user = this.extractUserFromJwt(accessToken, params.email);
+    }
 
-    return {
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
-      user,
-    };
+    return { tokens: { accessToken, refreshToken }, user };
   }
 
   async logout(): Promise<void> {
@@ -53,13 +65,18 @@ export class AuthRepository implements IAuthRepository {
   }
 
   async getCurrentUser(): Promise<Client> {
-    const token = await tokenStorage.getAccessToken();
-    if (!token) throw new Error('Niste prijavljeni');
-
-    const decoded = this.decodeJwt(token);
-    if (!decoded) throw new Error('Neispravan token');
-
-    return this.mapJwtToClient(decoded, decoded.email || decoded.sub || '');
+    const data = await this.client.get<ClientApiResponse>('/api/clients/me');
+    return {
+      id: data.id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      dateOfBirth: data.date_of_birth,
+      gender: data.gender,
+      email: data.email,
+      phone: data.phone_number,
+      address: data.address,
+      accounts: [],
+    };
   }
 
   async isAuthenticated(): Promise<boolean> {
@@ -87,9 +104,7 @@ export class AuthRepository implements IAuthRepository {
 
     const newAccessToken = response.access_token ?? response.accessToken;
     const newRefreshToken = response.refresh_token ?? response.refreshToken ?? refreshToken;
-    if (!newAccessToken) {
-      throw new Error('Server nije vratio novi access token.');
-    }
+    if (!newAccessToken) throw new Error('Server nije vratio novi access token.');
 
     await tokenStorage.saveTokens(newAccessToken, newRefreshToken);
     return newAccessToken;
@@ -108,20 +123,16 @@ export class AuthRepository implements IAuthRepository {
 
   private extractUserFromJwt(token: string, email: string): Client {
     const decoded = this.decodeJwt(token);
-    return this.mapJwtToClient(decoded, email);
-  }
-
-  private mapJwtToClient(decoded: Record<string, any> | null, email: string): Client {
     return {
-      id: decoded?.id || decoded?.user_id || decoded?.sub || 0,
-      firstName: decoded?.first_name || decoded?.firstName || '',
-      lastName: decoded?.last_name || decoded?.lastName || '',
+      id: decoded?.id || 0,
+      firstName: decoded?.first_name || '',
+      lastName: decoded?.last_name || '',
       dateOfBirth: decoded?.date_of_birth || 0,
       gender: decoded?.gender || '',
       email: decoded?.email || email,
-      phone: decoded?.phone_number || decoded?.phone || '',
+      phone: decoded?.phone_number || '',
       address: decoded?.address || '',
-      accounts: decoded?.accounts || [],
+      accounts: [],
     };
   }
 }

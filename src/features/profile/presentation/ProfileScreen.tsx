@@ -2,29 +2,38 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_USER } from '../../../shared/data/mockData';
+import { Client } from '../../../shared/types/models';
 
-interface Props { onLogout: () => void; }
+interface Props {
+  onLogout: () => void;
+  user: Client | null;
+}
 
-export default function ProfileScreen({ onLogout }: Props) {
+export default function ProfileScreen({ onLogout, user }: Props) {
+  const firstName = user?.firstName ?? '';
+  const lastName = user?.lastName ?? '';
+  const email = user?.email ?? '';
+  const phone = user?.phone ?? '';
+  const address = user?.address ?? '';
+
   return (
     <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Profil</Text>
 
       <View style={styles.avatarCard}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{MOCK_USER.firstName[0]}{MOCK_USER.lastName[0]}</Text>
+          <Text style={styles.avatarText}>{firstName[0]}{lastName[0]}</Text>
         </View>
-        <Text style={styles.name}>{MOCK_USER.firstName} {MOCK_USER.lastName}</Text>
-        <Text style={styles.email}>{MOCK_USER.email}</Text>
+        <Text style={styles.name}>{firstName} {lastName}</Text>
+        <Text style={styles.email}>{email}</Text>
       </View>
 
       <View style={styles.infoCard}>
         {[
-          { icon: 'person-outline' as const, label: 'Ime i prezime', value: `${MOCK_USER.firstName} ${MOCK_USER.lastName}` },
-          { icon: 'mail-outline' as const, label: 'Email', value: MOCK_USER.email },
-          { icon: 'call-outline' as const, label: 'Telefon', value: MOCK_USER.phone },
-          { icon: 'location-outline' as const, label: 'Adresa', value: MOCK_USER.address },
+          { icon: 'person-outline' as const, label: 'Ime i prezime', value: `${firstName} ${lastName}` },
+          { icon: 'mail-outline' as const, label: 'Email', value: email },
+          { icon: 'call-outline' as const, label: 'Telefon', value: phone },
+          { icon: 'location-outline' as const, label: 'Adresa', value: address },
         ].map(({ icon, label, value }, i) => (
           <View key={label} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
             <Ionicons name={icon} size={18} color={C.textMuted} style={{ marginRight: 14 }} />
