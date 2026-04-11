@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, Modal, StyleSheet,
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
 import { MOCK_RECIPIENTS } from '../../../shared/data/mockData';
+import { compareByNameThenAccount } from '../../../shared/utils/recipientOrder';
 
 interface Props { onBack: () => void; }
 
@@ -44,6 +45,8 @@ export default function RecipientsScreen({ onBack }: Props) {
     setShowDelete(null);
   };
 
+  const sortedRecipients = [...recipients].sort((a, b) => compareByNameThenAccount(a, b, r => r.name, r => r.account));
+
   return (
     <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
       <View style={styles.hRow}>
@@ -58,12 +61,12 @@ export default function RecipientsScreen({ onBack }: Props) {
       </TouchableOpacity>
 
       {/* Recipients list */}
-      {recipients.length === 0 ? (
+      {sortedRecipients.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="people-outline" size={48} color={C.textMuted} />
           <Text style={styles.emptyText}>Nemate sačuvane primaoce</Text>
         </View>
-      ) : recipients.map(r => (
+      ) : sortedRecipients.map(r => (
         <View key={r.id} style={styles.recipientRow}>
           <View style={styles.recipientIcon}><Ionicons name="person" size={18} color={C.primary} /></View>
           <View style={styles.flex1}>
@@ -123,7 +126,7 @@ export default function RecipientsScreen({ onBack }: Props) {
             <Ionicons name="trash" size={40} color={C.danger} style={{ alignSelf: 'center', marginBottom: 16 }} />
             <Text style={styles.deleteTitle}>Obriši primaoca?</Text>
             <Text style={styles.deleteSub}>
-              {recipients.find(r => r.id === showDelete)?.name || ''} će biti uklonjen iz liste primaoca.
+              {sortedRecipients.find(r => r.id === showDelete)?.name || ''} će biti uklonjen iz liste primaoca.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
               <TouchableOpacity style={styles.secBtn} onPress={() => setShowDelete(null)}>

@@ -1,5 +1,6 @@
 import { IExchangeRepository } from '../domain/IExchangeRepository';
-import { Account, ExchangeRate } from '../../../shared/types/models';
+import { ExchangeRate } from '../../../shared/types/models';
+import { API_CONFIG } from '../../../core/network/NetworkClient';
 import { ApiError, NetworkClient } from '../../../core/network/NetworkClient';
 import { MockExchangeRepository } from './MockExchangeRepository';
 
@@ -23,9 +24,14 @@ interface ConvertApiResponse {
   convertedAmount?: number | string;
   converted_amount?: number | string;
   amount?: number | string;
+  initial_amount?: number | string;
+  final_amount?: number | string;
+  fee?: number | string;
   rate?: number | string;
   exchangeRate?: number | string;
   exchange_rate?: number | string;
+  status?: string;
+  purpose?: string;
 }
 
 export class ExchangeRepository implements IExchangeRepository {
@@ -38,7 +44,7 @@ export class ExchangeRepository implements IExchangeRepository {
       const responses = await this.tryGetRates();
       return responses.map(rate => this.mapRate(rate));
     } catch (error) {
-      if (!this.shouldUseMockFallback(error)) {
+      if (!API_CONFIG.USE_MOCK || !this.shouldUseMockFallback(error)) {
         throw error;
       }
 
@@ -46,46 +52,54 @@ export class ExchangeRepository implements IExchangeRepository {
     }
   }
 
-  async convert(
-    fromAccountId: number,
-    toAccountId: number,
-    fromCurrency: string,
-    toCurrency: string,
-    amount: number
-  ) {
-    const payload = {
+  async convert(params: {
+    fromAccountId: number;
+    toAccountId: number;
+    fromAccountNumber: string;
+    toAccountNumber: string;
+    fromCurrency: string;
+    toCurrency: string;
+    amount: number;
+    description: string;
+    totpCode?: string;
+  }) {
+    const {
       fromAccountId,
       toAccountId,
+      fromAccountNumber,
+      toAccountNumber,
       fromCurrency,
       toCurrency,
       amount,
-      from_account_id: fromAccountId,
-      to_account_id: toAccountId,
+      description,
+      totpCode,
+    } = params;
+
+    const payload = {
       from_currency: fromCurrency,
       to_currency: toCurrency,
+      amount,
+      from_account: fromAccountNumber,
+      to_account: toAccountNumber,
+      description,
     };
 
-    const endpoints = [
-      '/api/exchange/convert',
-      '/api/exchange-rates/convert',
-      '/api/convert',
-    ];
+    const endpoints = ['/api/exchange/convert'];
+    const extraHeaders = totpCode ? { TOTP: totpCode } : undefined;
 
     for (const endpoint of endpoints) {
       try {
-        const response = await this.client.post<ConvertApiResponse>(endpoint, payload, {
-          retryOnUnauthorized: false,
-        });
+        const response = await this.client.post<ConvertApiResponse>(endpoint, payload, extraHeaders);
         return this.mapConversion(response);
       } catch (error) {
-        if (error instanceof ApiError && error.statusCode === 401) {
-          throw new Error('Potrebna je nova prijava ili backend odbija preview konverzije.');
-        }
-
         if (!this.shouldTryNextEndpoint(error)) {
           throw error;
         }
       }
+    }
+
+    if (!API_CONFIG.USE_MOCK) {
+      throw new Error('Backend nije prihvatio konverziju preko podrzanog endpointa.');
     }
 
     try {
@@ -95,78 +109,18 @@ export class ExchangeRepository implements IExchangeRepository {
         throw error;
       }
 
-      return this.fallbackRepository.convert(fromAccountId, toAccountId, fromCurrency, toCurrency, amount);
+      return this.fallbackRepository.convert({
+        fromAccountId,
+        toAccountId,
+        fromAccountNumber,
+        toAccountNumber,
+        fromCurrency,
+        toCurrency,
+        amount,
+        description,
+        totpCode,
+      });
     }
-  }
-
-  async executeConversion(
-    fromAccount: Account,
-    toAccount: Account,
-    amount: number,
-    verificationCode?: string
-  ) {
-    const preview = await this.convert(
-      fromAccount.id,
-      toAccount.id,
-      fromAccount.currency,
-      toAccount.currency,
-      amount
-    );
-
-    const payload = {
-      from_account: fromAccount.accountNumber || String(fromAccount.id),
-      to_account: toAccount.accountNumber || String(toAccount.id),
-      amount,
-      description: `exchange ${amount} ${fromAccount.currency} to ${toAccount.currency}`,
-      converted_amount: preview.convertedAmount,
-      exchange_rate: preview.rate,
-      from_currency: fromAccount.currency,
-      to_currency: toAccount.currency,
-      fromAccountId: fromAccount.id,
-      toAccountId: toAccount.id,
-      from_account_id: fromAccount.id,
-      to_account_id: toAccount.id,
-    };
-
-    const endpoints = [
-      '/api/transactions/transfer/',
-      '/api/transactions/transfer',
-    ];
-
-    const trimmedCode = verificationCode?.trim();
-    const requestHeaders = trimmedCode ? { TOTP: trimmedCode } : undefined;
-
-    for (const endpoint of endpoints) {
-      try {
-        await this.client.post(endpoint, payload, {
-          headers: requestHeaders,
-          retryOnUnauthorized: false,
-        });
-        return preview;
-      } catch (error) {
-        if (error instanceof ApiError && error.statusCode === 401) {
-          const normalizedMessage = error.message.toLowerCase();
-
-          if (normalizedMessage.includes("doesn't have totp setup") || normalizedMessage.includes('does not have totp setup')) {
-            throw new Error('Korisnik nema aktiviran jednokratni kod za potvrdu transakcije.');
-          }
-
-          if (normalizedMessage.includes('invalid') || normalizedMessage.includes('wrong code')) {
-            throw new Error('Jednokratni kod nije ispravan.');
-          }
-
-          throw new Error(trimmedCode
-            ? 'Jednokratni kod nije prihvaćen za potvrdu transakcije.'
-            : 'Unesite jednokratni kod za potvrdu transakcije.');
-        }
-
-        if (!this.shouldTryNextEndpoint(error)) {
-          throw error;
-        }
-      }
-    }
-
-    throw new Error('Neuspešno izvršenje menjačke transakcije.');
   }
 
   private async tryGetRates(): Promise<ExchangeRateApiResponse[]> {
@@ -188,41 +142,68 @@ export class ExchangeRepository implements IExchangeRepository {
     return {
       fromCurrency,
       toCurrency: rate.toCurrency ?? rate.to_currency ?? 'RSD',
-      buyRate: this.roundToTwo(this.toNumber(rate.buyRate ?? rate.buy_rate)),
-      sellRate: this.roundToTwo(this.toNumber(rate.sellRate ?? rate.sell_rate)),
-      middleRate: this.roundToTwo(this.toNumber(rate.middleRate ?? rate.middle_rate)),
+      buyRate: this.toNumber(rate.buyRate ?? rate.buy_rate),
+      sellRate: this.toNumber(rate.sellRate ?? rate.sell_rate),
+      middleRate: this.toNumber(rate.middleRate ?? rate.middle_rate),
     };
   }
 
   private mapConversion(response: ConvertApiResponse) {
     const convertedAmount = this.toNumber(
-      response.convertedAmount ?? response.converted_amount ?? response.amount
+      response.final_amount ?? response.convertedAmount ?? response.converted_amount ?? response.amount
     );
-    const rate = this.toNumber(
+    const explicitRate = this.toOptionalNumber(
       response.rate ?? response.exchangeRate ?? response.exchange_rate
     );
+    const initialAmount = this.toOptionalNumber(response.initial_amount);
+    const derivedRate = initialAmount && initialAmount > 0 ? convertedAmount / initialAmount : undefined;
+    const resolvedRate = explicitRate ?? derivedRate ?? 0;
 
     return {
-      convertedAmount: this.roundToTwo(convertedAmount),
-      rate: this.roundToTwo(rate),
+      convertedAmount,
+      rate: resolvedRate,
+      fee: response.fee !== undefined ? this.toNumber(response.fee) : undefined,
+      status: response.status,
+      purpose: response.purpose,
     };
   }
 
   private async convertFromRates(fromCurrency: string, toCurrency: string, amount: number) {
     const rates = await this.getRates();
-    const foreignCurrency = fromCurrency === 'RSD' ? toCurrency : fromCurrency;
-    const rate = rates.find(r => r.fromCurrency === foreignCurrency && r.toCurrency === 'RSD');
-
-    if (!rate) {
-      throw new Error(`Kurs za ${foreignCurrency} nije pronađen.`);
+    const sourceCurrency = fromCurrency === 'RSD' ? toCurrency : fromCurrency;
+    const sourceRate = rates.find(r => r.fromCurrency === sourceCurrency && r.toCurrency === 'RSD');
+    if (!sourceRate) {
+      throw new Error(`Kurs za ${sourceCurrency} nije pronađen.`);
     }
 
-    const isBuying = fromCurrency === 'RSD';
-    const usedRate = this.roundToTwo(isBuying ? rate.sellRate : rate.buyRate);
+    if (fromCurrency === 'RSD') {
+      const usedRate = sourceRate.sellRate;
+      return {
+        convertedAmount: amount / usedRate,
+        rate: usedRate,
+      };
+    }
+
+    if (toCurrency === 'RSD') {
+      const usedRate = sourceRate.buyRate;
+      return {
+        convertedAmount: amount * usedRate,
+        rate: usedRate,
+      };
+    }
+
+    const targetRate = rates.find(r => r.fromCurrency === toCurrency && r.toCurrency === 'RSD');
+    if (!targetRate) {
+      throw new Error(`Kurs za ${toCurrency} nije pronađen.`);
+    }
+
+    const sourceToRsd = amount * sourceRate.buyRate;
+    const convertedAmount = sourceToRsd / targetRate.sellRate;
+    const effectiveRate = convertedAmount / amount;
 
     return {
-      convertedAmount: this.roundToTwo(isBuying ? amount / usedRate : amount * usedRate),
-      rate: usedRate,
+      convertedAmount,
+      rate: effectiveRate,
     };
   }
 
@@ -247,7 +228,12 @@ export class ExchangeRepository implements IExchangeRepository {
     return parsed;
   }
 
-  private roundToTwo(value: number): number {
-    return Math.round(value * 100) / 100;
+  private toOptionalNumber(value: number | string | undefined): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const parsed = typeof value === 'string' ? parseFloat(value) : value;
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 }

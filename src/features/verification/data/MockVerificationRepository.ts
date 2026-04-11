@@ -1,92 +1,81 @@
-import {
-  CreatedVerificationRequest,
-  IVerificationRepository,
-  PendingVerificationDetails,
-  VerificationRequestPayload,
-} from '../domain/IVerificationRepository';
+import { IVerificationRepository } from '../domain/IVerificationRepository';
 import { VerificationRequest } from '../../../shared/types/models';
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-const HISTORY: VerificationRequest[] = [
+const INITIAL_HISTORY: VerificationRequest[] = [
   { id: 1, action: 'Plaćanje - EPS Beograd', description: 'Račun za struju', amount: '4,580.00 RSD', timestamp: '05.03.2025 14:32', status: 'confirmed', code: '482917' },
-  { id: 2, action: 'Prenos između računa', description: 'Prenos sa tekućeg na devizni', amount: '500.00 EUR', timestamp: '03.03.2025 09:15', status: 'confirmed', code: '739201' },
+  { id: 2, action: 'Menjačnica - odlazna konverzija', description: 'Konverzija sa tekućeg na devizni', amount: '500.00 EUR', timestamp: '03.03.2025 09:15', status: 'confirmed', code: '739201' },
   { id: 3, action: 'Novo plaćanje - Telenor', description: 'Mesečni račun', amount: '2,890.00 RSD', timestamp: '01.03.2025 18:44', status: 'rejected', code: '156483' },
   { id: 4, action: 'Plaćanje - Informatika AD', description: 'Rata kredita', amount: '15,420.00 RSD', timestamp: '28.02.2025 10:20', status: 'confirmed', code: '927364' },
-  { id: 5, action: 'Prenos na devizni račun', description: 'Konverzija', amount: '200.00 EUR', timestamp: '25.02.2025 11:05', status: 'expired', code: '648201' },
+  { id: 5, action: 'Menjačnica - dolazna konverzija', description: 'Konverzija', amount: '200.00 EUR', timestamp: '25.02.2025 11:05', status: 'expired', code: '648201' },
+];
+
+const INITIAL_PENDING: VerificationRequest[] = [
+  {
+    id: 99,
+    action: 'Novo plaćanje',
+    description: 'Komunalne usluge',
+    amount: '1,250.00 RSD',
+    recipientName: 'Vodovod Beograd',
+    recipientAccount: '908-0000000987654-32',
+    sourceAccount: '265-0000000011234-56',
+    timestamp: new Date().toISOString(),
+    status: 'pending',
+  },
 ];
 
 export class MockVerificationRepository implements IVerificationRepository {
-  private generatedCodes = new Map<string, string>();
+  private history = [...INITIAL_HISTORY];
+  private pendingQueue = [...INITIAL_PENDING];
 
-  async getHistory(): Promise<VerificationRequest[]> { await delay(500); return HISTORY; }
+  async getHistory(): Promise<VerificationRequest[]> {
+    await delay(500);
+    return [...this.history].sort((a, b) => this.toTime(b.timestamp) - this.toTime(a.timestamp));
+  }
+
   async getPending(): Promise<VerificationRequest | null> {
     await delay(300);
-    return { id: 99, action: 'Novo plaćanje', description: 'Komunalne usluge', amount: '1,250.00 RSD', recipientName: 'Vodovod Beograd', recipientAccount: '908-0000000987654-32', sourceAccount: '265-0000000011234-56', timestamp: new Date().toISOString(), status: 'pending' };
-  }
-  async confirm(id: number): Promise<void> { await delay(800); }
-  async reject(id: number): Promise<void> { await delay(800); }
-
-  async createVerificationRequest(
-    type: string,
-    payload: VerificationRequestPayload
-  ): Promise<CreatedVerificationRequest> {
-    await delay(400);
-
-    return {
-      verificationId: `mock-${Date.now()}`,
-      expiresIn: 300,
-      maxAttempts: 3,
-      status: 'pending',
-    };
+    return this.pendingQueue[0] ? { ...this.pendingQueue[0] } : null;
   }
 
-  async getPendingVerification(): Promise<PendingVerificationDetails | null> {
-    await delay(300);
-
-    return {
-      id: 'mock-pending',
-      type: 'exchange',
-      status: 'pending',
-      expiresAt: new Date(Date.now() + 300000).toISOString(),
-      attemptsLeft: 3,
-      payload: {
-        from_account: '333000198765432120',
-        to_account: '333000198765432110',
-        amount: 500,
-        description: 'exchange 500 USD to RSD',
-      },
-    };
+  async confirm(id: number): Promise<void> {
+    await delay(800);
+    this.completePending(id, 'confirmed');
   }
 
-  async generateVerificationCode(verificationId: string): Promise<{ code: string; expiresIn: number }> {
-    await delay(300);
-
-    const code = '791376';
-    this.generatedCodes.set(verificationId, code);
-
-    return {
-      code,
-      expiresIn: 300,
-    };
+  async reject(id: number): Promise<void> {
+    await delay(800);
+    this.completePending(id, 'rejected');
   }
 
-  async confirmVerification(
-    verificationId: string,
-    code: string
-  ): Promise<{ status: string; transactionStatus?: string; result?: Record<string, unknown> }> {
-    await delay(400);
-
-    if (this.generatedCodes.get(verificationId) !== code.trim()) {
-      throw new Error('Verifikacioni kod nije ispravan.');
+  private completePending(id: number, status: 'confirmed' | 'rejected'): void {
+    const index = this.pendingQueue.findIndex(item => item.id === id);
+    if (index === -1) {
+      return;
     }
 
-    return {
-      status: 'confirmed',
-      transactionStatus: 'completed',
-      result: {
-        verification_id: verificationId,
-      },
-    };
+    const [item] = this.pendingQueue.splice(index, 1);
+    this.history.unshift({
+      ...item,
+      status,
+      timestamp: this.formatTimestamp(new Date()),
+    });
+  }
+
+  private formatTimestamp(date: Date): string {
+    return new Intl.DateTimeFormat('sr-RS', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  }
+
+  private toTime(timestamp: string): number {
+    const parsed = Date.parse(timestamp);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
 }

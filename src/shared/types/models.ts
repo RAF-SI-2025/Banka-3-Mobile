@@ -1,3 +1,4 @@
+
 export interface Client {
   id: number;
   firstName: string;
@@ -13,6 +14,7 @@ export interface Client {
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  sessionId?: string;
 }
 
 export type AccountType = 'tekuci' | 'devizni' | 'stedni' | 'poslovni';
@@ -22,8 +24,11 @@ export interface Account {
   id: number;
   accountNumber: string;
   ownerId: number;
+  ownerName?: string;
   name: string;
   type: AccountType;
+  subtype?: string;
+  companyName?: string;
   currency: string;
   balance: number;
   availableBalance: number;
@@ -31,6 +36,17 @@ export interface Account {
   status: AccountStatus;
   createdAt: string;
   expiresAt: string;
+  monthlyMaintenance?: number;
+  dailyLimit?: number;
+  monthlyLimit?: number;
+  dailySpent?: number;
+  monthlySpent?: number;
+}
+
+export interface AccountLimitUpdate {
+  dailyLimit?: number;
+  monthlyLimit?: number;
+  totpCode?: string;
 }
 
 export type TransactionStatus = 'completed' | 'pending' | 'rejected';
@@ -68,15 +84,30 @@ export type CardType = 'debit' | 'credit';
 export type CardStatus = 'active' | 'blocked' | 'deactivated';
 
 export interface Card {
-  id: string;
+  id: number;
   cardNumber: string;
   cardName: string;
   cardType: CardType;
-  accountId: string;
+  cardBrand: string;
+  accountId: number;
+  accountNumber: string;
+  creationDate: string;
   expiresAt: string;
+  expirationDate: string;
+  cvv: string;
   limit: number;
   status: CardStatus;
   currency: string;
+}
+
+export interface CardRequest {
+  accountId?: number;
+  accountNumber: string;
+  cardType: CardType;
+  cardBrand: string;
+  currency: string;
+  limit?: number;
+  cardName?: string;
 }
 
 export type LoanStatus = 'active' | 'paid' | 'defaulted';
@@ -85,23 +116,31 @@ export interface Loan {
   id: number;
   name: string;
   number: string;
+  loanType: string;
   amount: number;
   currency: string;
   period: number;
   nominalRate: number;
   effectiveRate: number;
+  accountId: number;
+  accountNumber: string;
+  agreementDate: string;
+  maturityDate: string;
+  nextInstallmentAmount: number;
+  nextInstallmentDate: string;
+  remainingDebt: number;
   startDate: string;
   endDate: string;
   installment: number;
   nextPayment: string;
   remaining: number;
   paid: number;
-  accountId: number;
   status: LoanStatus;
 }
 
 export interface LoanApplication {
   loanType: string;
+  interestRateType: 'fixed' | 'variable';
   amount: number;
   currency: string;
   purpose: string;
@@ -109,8 +148,26 @@ export interface LoanApplication {
   permanentEmployment: boolean;
   employmentYears: number;
   maturityMonths: number;
-  accountNumber: string;  // account_number string, ne numeric id
+  accountNumber: string;
+  accountId?: number;
   phone: string;
+}
+
+export interface LoanRequest {
+  id: number;
+  loanType: string;
+  amount: number;
+  currency: string;
+  purpose: string;
+  salary: number;
+  employmentStatus: string;
+  employmentPeriod: number;
+  phoneNumber: string;
+  repaymentPeriod: number;
+  accountNumber: string;
+  status: string;
+  interestRateType: 'fixed' | 'variable' | string;
+  submissionDate: string;
 }
 
 export interface PaymentRecipient {

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_ACCOUNTS } from '../../../shared/data/mockData';
+import { compareAccountsByCurrencyAndBalance } from '../../../shared/utils/accountOrder';
+import { useAccounts } from '../../../shared/hooks/useFeatures';
 import { fmt } from '../../../shared/utils/formatters';
+import { Account } from '../../../shared/types/models';
 
 interface Props { onBack: () => void; }
 
@@ -11,12 +13,21 @@ type Mode = 'deposit' | 'withdraw';
 type Step = 'form' | 'confirm' | 'success';
 
 export default function DepositScreen({ onBack }: Props) {
+  const { state: accountsState } = useAccounts();
+  const accounts = [...(accountsState.data ?? [])].sort(compareAccountsByCurrencyAndBalance);
+
   const [step, setStep] = useState<Step>('form');
   const [mode, setMode] = useState<Mode>('deposit');
-  const [account, setAccount] = useState(MOCK_ACCOUNTS[0]);
+  const [account, setAccount] = useState<Account | null>(null);
   const [amount, setAmount] = useState('');
   const [showAccounts, setShowAccounts] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!account && accounts.length > 0) {
+      setAccount(accounts[0]);
+    }
+  }, [accounts, account]);
 
   const parsedAmount = parseFloat(amount);
   const isWithdraw = mode === 'withdraw';
@@ -25,9 +36,14 @@ export default function DepositScreen({ onBack }: Props) {
 
   const validate = () => {
     const e: Record<string, string> = {};
+    if (!account) {
+      e.account = 'Izaberite račun';
+      setErrors(e);
+      return false;
+    }
     if (!amount.trim() || isNaN(parsedAmount) || parsedAmount <= 0)
       e.amount = 'Unesite validan iznos';
-    if (isWithdraw && parsedAmount > account.available)
+    if (isWithdraw && parsedAmount > account.availableBalance)
       e.amount = 'Nedovoljno raspoloživih sredstava';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -41,6 +57,22 @@ export default function DepositScreen({ onBack }: Props) {
     setAmount('');
     setErrors({});
   };
+
+  if (accountsState.loading) {
+    return (
+      <View style={[styles.flex1, styles.center, { backgroundColor: C.bg }]}>
+        <Text style={styles.successSub}>Učitavanje računa...</Text>
+      </View>
+    );
+  }
+
+  if (!account) {
+    return (
+      <View style={[styles.flex1, styles.center, { backgroundColor: C.bg, padding: 24 }]}>
+        <Text style={styles.successSub}>Nema dostupnih računa.</Text>
+      </View>
+    );
+  }
 
   if (step === 'success') {
     return (
@@ -71,7 +103,7 @@ export default function DepositScreen({ onBack }: Props) {
           <View style={styles.successRow}>
             <Text style={styles.successLabel}>Novo stanje</Text>
             <Text style={styles.successValue}>
-              {fmt(account.available + (isWithdraw ? -parsedAmount : parsedAmount), account.currency)}
+              {fmt(account.availableBalance + (isWithdraw ? -parsedAmount : parsedAmount), account.currency)}
             </Text>
           </View>
         </View>
@@ -110,12 +142,12 @@ export default function DepositScreen({ onBack }: Props) {
           </View>
           <View style={[styles.confirmRow, styles.confirmRowBorder]}>
             <Text style={styles.confirmLabel}>Broj računa</Text>
-            <Text style={styles.confirmValue}>{account.number}</Text>
+            <Text style={styles.confirmValue}>{account.accountNumber}</Text>
           </View>
           <View style={[styles.confirmRow, styles.confirmRowBorder]}>
             <Text style={styles.confirmLabel}>Raspoloživo nakon</Text>
             <Text style={styles.confirmValue}>
-              {fmt(account.available + (isWithdraw ? -parsedAmount : parsedAmount), account.currency)}
+              {fmt(account.availableBalance + (isWithdraw ? -parsedAmount : parsedAmount), account.currency)}
             </Text>
           </View>
         </View>
@@ -173,7 +205,7 @@ export default function DepositScreen({ onBack }: Props) {
         </View>
         <View style={styles.flex1}>
           <Text style={styles.selectMain}>{account.name}</Text>
-          <Text style={styles.selectSub}>Raspoloživo: {fmt(account.available, account.currency)}</Text>
+          <Text style={styles.selectSub}>Raspoloživo: {fmt(account.availableBalance, account.currency)}</Text>
         </View>
         <Ionicons name="chevron-down" size={18} color={C.textMuted} />
       </TouchableOpacity>
@@ -195,7 +227,7 @@ export default function DepositScreen({ onBack }: Props) {
 
       {isWithdraw && (
         <Text style={styles.availableHint}>
-          Raspoloživo za isplatu: <Text style={{ color: C.textPrimary, fontWeight: '600' }}>{fmt(account.available, account.currency)}</Text>
+          Raspoloživo za isplatu: <Text style={{ color: C.textPrimary, fontWeight: '600' }}>{fmt(account.availableBalance, account.currency)}</Text>
         </Text>
       )}
 
@@ -217,25 +249,27 @@ export default function DepositScreen({ onBack }: Props) {
                 <Ionicons name="close" size={24} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
-            {MOCK_ACCOUNTS.map(acc => (
-              <TouchableOpacity
-                key={acc.id}
-                style={styles.sheetItem}
-                onPress={() => { setAccount(acc); setShowAccounts(false); }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sheetItemIcon}>
-                  <Ionicons name="wallet" size={18} color={C.primary} />
-                </View>
-                <View style={styles.flex1}>
-                  <Text style={styles.sheetItemTitle}>{acc.name}</Text>
-                  <Text style={styles.sheetItemSub}>Raspoloživo: {fmt(acc.available, acc.currency)}</Text>
-                </View>
-                {account.id === acc.id && (
-                  <Ionicons name="checkmark-circle" size={20} color={C.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+              {accounts.map(acc => (
+                <TouchableOpacity
+                  key={acc.id}
+                  style={styles.sheetItem}
+                  onPress={() => { setAccount(acc); setShowAccounts(false); }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.sheetItemIcon}>
+                    <Ionicons name="wallet" size={18} color={C.primary} />
+                  </View>
+                  <View style={styles.flex1}>
+                    <Text style={styles.sheetItemTitle}>{acc.name}</Text>
+                    <Text style={styles.sheetItemSub}>Raspoloživo: {fmt(acc.availableBalance, acc.currency)}</Text>
+                  </View>
+                  {account.id === acc.id && (
+                    <Ionicons name="checkmark-circle" size={20} color={C.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>

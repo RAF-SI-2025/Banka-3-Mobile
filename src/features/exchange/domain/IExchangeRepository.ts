@@ -1,19 +1,16 @@
-import { Account, ExchangeRate } from '../../../shared/types/models';
+import { ExchangeRate } from '../../../shared/types/models';
 export interface IExchangeRepository {
   getRates(): Promise<ExchangeRate[]>;
 
-  convert(
-    fromAccountId: number,
-    toAccountId: number,
-    fromCurrency: string,
-    toCurrency: string,
-    amount: number
-  ): Promise<{ convertedAmount: number; rate: number }>;
-
-  executeConversion(
-    fromAccount: Account,
-    toAccount: Account,
-    amount: number,
-    verificationCode?: string
-  ): Promise<{ convertedAmount: number; rate: number }>;
+  convert(params: {
+    fromAccountId: number;
+    toAccountId: number;
+    fromAccountNumber: string;
+    toAccountNumber: string;
+    fromCurrency: string;
+    toCurrency: string;
+    amount: number;
+    description: string;
+    totpCode?: string;
+  }): Promise<{ convertedAmount: number; rate: number; fee?: number; status?: string; purpose?: string }>;
 }

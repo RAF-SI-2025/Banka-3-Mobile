@@ -1,6 +1,6 @@
 import { IAccountRepository } from '../domain/IAccountRepository';
-import { Account, Transaction } from '../../../shared/types/models';
-import { getMockAccountById, getMockAccounts, getMockTransactions } from './mockAccountStore';
+import { Account, AccountLimitUpdate, Transaction } from '../../../shared/types/models';
+import { getMockAccountById, getMockAccounts, getMockTransactions, updateMockAccountLimits, updateMockAccountName } from './mockAccountStore';
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -20,5 +20,18 @@ export class MockAccountRepository implements IAccountRepository {
   async getTransactions(accountId: number): Promise<Transaction[]> {
     await delay(400);
     return getMockTransactions(accountId);
+  }
+
+  async updateAccountName(accountNumber: string, name: string): Promise<void> {
+    await delay(400);
+    updateMockAccountName(accountNumber, name);
+  }
+
+  async updateAccountLimits(accountNumber: string, updates: AccountLimitUpdate): Promise<void> {
+    await delay(400);
+    updateMockAccountLimits(accountNumber, {
+      dailyLimit: updates.dailyLimit,
+      monthlyLimit: updates.monthlyLimit,
+    });
   }
 }

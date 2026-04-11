@@ -6,7 +6,7 @@
 
 import { useReducer, useCallback, useEffect } from 'react';
 import { container } from '../../core/di/container';
-import { Account, Transaction, VerificationRequest, Card, Loan, ExchangeRate, PaymentRecipient } from '../types/models';
+import { Account, Transaction, VerificationRequest, Card, Loan, ExchangeRate, PaymentRecipient, AccountLimitUpdate, LoanRequest } from '../types/models';
 
 // ═══════════════════════════════════════════════════════
 // Generic async state helper
@@ -49,9 +49,19 @@ export function useAccounts() {
     } catch (e: any) { dispatch({ type: 'ERROR', error: e.message }); }
   }, [repo]);
 
+  const renameAccount = useCallback(async (accountNumber: string, name: string) => {
+    await repo.updateAccountName(accountNumber, name);
+    fetch();
+  }, [repo, fetch]);
+
+  const updateAccountLimits = useCallback(async (accountNumber: string, updates: AccountLimitUpdate) => {
+    await repo.updateAccountLimits(accountNumber, updates);
+    fetch();
+  }, [repo, fetch]);
+
   useEffect(() => { fetch(); }, [fetch]);
 
-  return { state, refresh: fetch };
+  return { state, refresh: fetch, actions: { renameAccount, updateAccountLimits, refresh: fetch } };
 }
 
 export function useTransactions(accountId: number) {
@@ -98,18 +108,20 @@ export function useVerification() {
   const confirm = useCallback(async (id: number) => {
     await repo.confirm(id);
     pendingDispatch({ type: 'SUCCESS', data: null });
+    fetchPending();
     fetchHistory();
-  }, [repo, fetchHistory]);
+  }, [repo, fetchHistory, fetchPending]);
 
   const reject = useCallback(async (id: number) => {
     await repo.reject(id);
     pendingDispatch({ type: 'SUCCESS', data: null });
+    fetchPending();
     fetchHistory();
-  }, [repo, fetchHistory]);
+  }, [repo, fetchHistory, fetchPending]);
 
   useEffect(() => { fetchHistory(); fetchPending(); }, [fetchHistory, fetchPending]);
 
-  return { history: historyState, pending: pendingState, actions: { confirm, reject, fetchPending } };
+  return { history: historyState, pending: pendingState, actions: { confirm, reject, fetchPending, fetchHistory } };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -132,14 +144,20 @@ export function useCards() {
     fetch();
   }, [repo, fetch]);
 
-  const unblockCard = useCallback(async (cardNumber: string) => {
-    await repo.unblockCard(cardNumber);
+  const requestCard = useCallback(async (request: Parameters<typeof repo.requestCard>[0]) => {
+    const result = await repo.requestCard(request);
+    fetch();
+    return result;
+  }, [repo, fetch]);
+
+  const confirmCard = useCallback(async (token: string) => {
+    await repo.confirmCard(token);
     fetch();
   }, [repo, fetch]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  return { state, actions: { blockCard, unblockCard, refresh: fetch } };
+  return { state, actions: { blockCard, requestCard, confirmCard, refresh: fetch } };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -164,6 +182,36 @@ export function useLoans() {
   useEffect(() => { fetch(); }, [fetch]);
 
   return { state, actions: { apply, refresh: fetch } };
+}
+
+// ═══════════════════════════════════════════════════════
+// useLoanRequests
+// ═══════════════════════════════════════════════════════
+export function useLoanRequests() {
+  const [state, dispatch] = useReducer(asyncReducer<LoanRequest[]>, initialAsync<LoanRequest[]>());
+  const repo = container.loanRepository;
+
+  const fetch = useCallback(async () => {
+    dispatch({ type: 'LOADING' });
+    try {
+      const data = await repo.getLoanRequests();
+      dispatch({ type: 'SUCCESS', data });
+    } catch (e: any) { dispatch({ type: 'ERROR', error: e.message }); }
+  }, [repo]);
+
+  const approve = useCallback(async (id: number) => {
+    await repo.approveLoanRequest(id);
+    fetch();
+  }, [repo, fetch]);
+
+  const reject = useCallback(async (id: number) => {
+    await repo.rejectLoanRequest(id);
+    fetch();
+  }, [repo, fetch]);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  return { state, actions: { approve, reject, refresh: fetch } };
 }
 
 // ═══════════════════════════════════════════════════════

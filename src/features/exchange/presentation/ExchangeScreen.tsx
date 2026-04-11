@@ -1,50 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
+import { fmtDateFromDate } from '../../../shared/utils/formatters';
 import { fmt } from '../../../shared/utils/formatters';
 import { useAccounts } from '../../../shared/hooks/useFeatures';
 import { useExchangeRates } from '../../../shared/hooks/useFeatures';
 import { container } from '../../../core/di/container';
+import { API_CONFIG } from '../../../core/network/NetworkClient';
 import { Account } from '../../../shared/types/models';
 
-interface Props { onBack: () => void; }
+interface Props {
+  onBack: () => void;
+  onRequireTotpSetup: () => void;
+  initialTotpCode: string;
+  onConsumeTotpCode: () => void;
+}
 
-type VerificationStepId = 'request' | 'pending' | 'code' | 'confirm';
-type VerificationStepState = 'pending' | 'active' | 'completed' | 'error';
-
-const VERIFICATION_STEPS: Array<{ id: VerificationStepId; title: string; description: string }> = [
-  {
-    id: 'request',
-    title: 'Request',
-    description: 'Kreiranje verification zahteva za konverziju.',
-  },
-  {
-    id: 'pending',
-    title: 'Pending',
-    description: 'Preuzimanje aktivnog verification zahteva.',
-  },
-  {
-    id: 'code',
-    title: 'Code',
-    description: 'Generisanje jednokratnog koda za potvrdu.',
-  },
-  {
-    id: 'confirm',
-    title: 'Confirm',
-    description: 'Slanje koda i izvršenje transakcije.',
-  },
-];
-
-export default function ExchangeScreen({ onBack }: Props) {
+export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotpCode, onConsumeTotpCode }: Props) {
   const { state: accountsState, refresh: refreshAccounts } = useAccounts();
   const { state: ratesState } = useExchangeRates();
 
   const accounts = accountsState.data ?? [];
   const rates = ratesState.data ?? [];
 
-  const rsdAccounts = accounts.filter(a => a.currency === 'RSD');
-  const forAccounts = accounts.filter(a => a.currency !== 'RSD');
+  const supportedCurrencies = useMemo(() => {
+    const currencies = new Set<string>(['RSD']);
+    rates.forEach(rate => currencies.add(rate.fromCurrency));
+    return currencies;
+  }, [rates]);
+
+  const exchangeAccounts = useMemo(
+    () => accounts.filter(account => supportedCurrencies.has(account.currency)),
+    [accounts, supportedCurrencies]
+  );
+
+  const rsdAccounts = exchangeAccounts.filter(a => a.currency === 'RSD');
+  const forAccounts = exchangeAccounts.filter(a => a.currency !== 'RSD');
 
   const [fromAcc, setFromAcc] = useState<Account | null>(null);
   const [toAcc, setToAcc]     = useState<Account | null>(null);
@@ -53,20 +45,93 @@ export default function ExchangeScreen({ onBack }: Props) {
   const [showFrom, setShowFrom] = useState(false);
   const [showTo, setShowTo]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState('');
-  const [verificationStep, setVerificationStep] = useState<VerificationStepId | null>(null);
-  const [completedConversion, setCompletedConversion] = useState<{ convertedAmount: number; rate: number } | null>(null);
+  const [loadingFreshCode, setLoadingFreshCode] = useState(false);
+  const [codeInfo, setCodeInfo] = useState('');
+  const [completedConversion, setCompletedConversion] = useState<{ convertedAmount: number; rate: number; fee?: number; status?: string; purpose?: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
 
-  // Pick defaults once accounts load
+  useEffect(() => {
+    if (initialTotpCode) {
+      setTotpCode(initialTotpCode);
+    }
+  }, [initialTotpCode]);
+
+  useEffect(() => {
+    if (fromAcc && !supportedCurrencies.has(fromAcc.currency)) {
+      setFromAcc(null);
+    }
+    if (toAcc && !supportedCurrencies.has(toAcc.currency)) {
+      setToAcc(null);
+    }
+  }, [fromAcc, toAcc, supportedCurrencies]);
+
+  useEffect(() => {
+    if (step !== 'confirm' || API_CONFIG.USE_MOCK) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFreshCode = async () => {
+      setLoadingFreshCode(true);
+      setCodeInfo('');
+      try {
+        const result = await container.totpRepository.requestTransactionCode();
+        if (!cancelled) {
+          setTotpCode(result.code);
+          setCodeInfo('Ucitan je svez verification kod sa backend-a.');
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setCodeInfo(e.message ?? 'Neuspesno osvezavanje verification koda.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingFreshCode(false);
+        }
+      }
+    };
+
+    loadFreshCode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
   const resolvedFrom = fromAcc ?? rsdAccounts[0] ?? accounts[0] ?? null;
   const resolvedTo   = toAcc   ?? forAccounts[0] ?? accounts.find(a => a.accountNumber !== resolvedFrom?.accountNumber) ?? null;
-
-  // ── Derived exchange logic ──────────────────────────────────────────────────
-  const buying      = resolvedFrom?.currency === 'RSD';
-  const foreignCur  = buying ? resolvedTo?.currency : resolvedFrom?.currency;
-  const rateObj     = rates.find(r => r.fromCurrency === foreignCur);
-  const activeRate  = buying ? (rateObj?.sellRate ?? 0) : (rateObj?.buyRate ?? 0);
+  const fromRateObj = !resolvedFrom || resolvedFrom.currency === 'RSD'
+    ? null
+    : rates.find(r => r.fromCurrency === resolvedFrom.currency) ?? null;
+  const toRateObj = !resolvedTo || resolvedTo.currency === 'RSD'
+    ? null
+    : rates.find(r => r.fromCurrency === resolvedTo.currency) ?? null;
+  const conversionMode = !resolvedFrom || !resolvedTo
+    ? 'buy'
+    : resolvedFrom.currency === 'RSD'
+      ? 'buy'
+      : resolvedTo.currency === 'RSD'
+        ? 'sell'
+        : 'cross';
+  const activeRate = useMemo(() => {
+    if (!resolvedFrom || !resolvedTo) return 0;
+    if (conversionMode === 'buy') {
+      return toRateObj?.sellRate ?? 0;
+    }
+    if (conversionMode === 'sell') {
+      return fromRateObj?.buyRate ?? 0;
+    }
+    const sourceBuyRate = fromRateObj?.buyRate ?? 0;
+    const targetSellRate = toRateObj?.sellRate ?? 0;
+    if (sourceBuyRate <= 0 || targetSellRate <= 0) return 0;
+    return sourceBuyRate / targetSellRate;
+  }, [conversionMode, fromRateObj, toRateObj, resolvedFrom, resolvedTo]);
+  const foreignCur = !resolvedFrom || !resolvedTo
+    ? undefined
+    : resolvedFrom.currency === 'RSD'
+      ? resolvedTo.currency
+      : resolvedFrom.currency;
 
   const amountNum = useMemo(() => {
     const normalized = amount.replace(',', '.');
@@ -97,19 +162,27 @@ export default function ExchangeScreen({ onBack }: Props) {
 
   const converted = useMemo(() => {
     if (!isValid) return 0;
-    return buying ? amountNum / activeRate : amountNum * activeRate;
-  }, [amountNum, activeRate, buying, isValid]);
+    if (conversionMode === 'buy') {
+      return amountNum / activeRate;
+    }
+    if (conversionMode === 'sell') {
+      return amountNum * activeRate;
+    }
+    const sourceBuyRate = fromRateObj?.buyRate ?? 0;
+    const targetSellRate = toRateObj?.sellRate ?? 0;
+    if (sourceBuyRate <= 0 || targetSellRate <= 0) return 0;
+    return (amountNum * sourceBuyRate) / targetSellRate;
+  }, [amountNum, activeRate, conversionMode, fromRateObj, toRateObj, isValid]);
+  const rateLabel = useMemo(() => {
+    if (conversionMode === 'cross') {
+      return `Efektivno: 1 ${foreignCur} = ${activeRate.toFixed(4)} ${resolvedTo?.currency} (preko RSD)`;
+    }
 
-  const resolveCompletedAmount = (value: unknown, fallback: number) => {
-    const parsed = typeof value === 'string' ? parseFloat(value) : value;
-    return Number.isFinite(parsed) ? Number(parsed) : fallback;
-  };
+    return `1 ${foreignCur} = ${activeRate.toFixed(2)} RSD (${conversionMode === 'buy' ? 'prodajni' : 'kupovni'})`;
+  }, [activeRate, conversionMode, foreignCur, resolvedTo?.currency]);
 
   const handleSwap = () => {
     const prev = resolvedFrom;
-    setSubmitError('');
-    setVerificationStep(null);
-    setVerificationStatus('');
     setFromAcc(resolvedTo);
     setToAcc(prev);
   };
@@ -117,139 +190,57 @@ export default function ExchangeScreen({ onBack }: Props) {
   const handleAmountChange = (text: string) => {
     const normalized = text.replace(/,/g, '.').replace(/[^0-9.]/g, '');
     const parts = normalized.split('.');
-    setSubmitError('');
-    setVerificationStep(null);
-    setVerificationStatus('');
     setAmount(parts.length <= 2 ? normalized : `${parts[0]}.${parts.slice(1).join('')}`);
   };
 
   const handleConfirm = async () => {
     if (!isValid || !resolvedFrom || !resolvedTo) return;
-
     setSubmitting(true);
-    setSubmitError('');
-    setVerificationStatus('');
     try {
-      setVerificationStep('request');
-      setVerificationStatus('Kreiram verification zahtev...');
-      const preview = await container.exchangeRepository.convert(
-        resolvedFrom.id,
-        resolvedTo.id,
-        resolvedFrom.currency,
-        resolvedTo.currency,
-        amountNum,
-      );
-
-      const verificationPayload = {
-        from_account: resolvedFrom.accountNumber,
-        to_account: resolvedTo.accountNumber,
+      const previousFromBalance = resolvedFrom.availableBalance;
+      const previousToBalance = resolvedTo.availableBalance;
+      const result = await container.exchangeRepository.convert({
+        fromAccountId: resolvedFrom.id,
+        toAccountId: resolvedTo.id,
+        fromAccountNumber: resolvedFrom.accountNumber,
+        toAccountNumber: resolvedTo.accountNumber,
+        fromCurrency: resolvedFrom.currency,
+        toCurrency: resolvedTo.currency,
         amount: amountNum,
-        description: `exchange ${amountNum} ${resolvedFrom.currency} to ${resolvedTo.currency}`,
-        from_currency: resolvedFrom.currency,
-        to_currency: resolvedTo.currency,
-        converted_amount: preview.convertedAmount,
-        exchange_rate: preview.rate,
-      };
-
-      const verificationRequest = await container.verificationRepository.createVerificationRequest(
-        'exchange',
-        verificationPayload,
-      );
-      setVerificationStep('pending');
-      setVerificationStatus(`Kreiran je verifikacioni zahtev ${verificationRequest.verificationId}.`);
-
-      const pending = await container.verificationRepository.getPendingVerification();
-      const verificationId = pending?.id ?? verificationRequest.verificationId;
-      setVerificationStep('code');
-      setVerificationStatus('Aktivan verification zahtev je pronađen. Generišem kod...');
-      const generatedCode = await container.verificationRepository.generateVerificationCode(verificationId);
-      setVerificationStep('confirm');
-      setVerificationStatus(`Generisan je kod ${generatedCode.code}. Potvrđujem transakciju...`);
-
-      const confirmation = await container.verificationRepository.confirmVerification(
-        verificationId,
-        generatedCode.code,
-      );
-
-      setCompletedConversion({
-        convertedAmount: resolveCompletedAmount(
-          confirmation.result?.final_amount ?? confirmation.result?.finalAmount,
-          preview.convertedAmount
-        ),
-        rate: preview.rate,
+        description: `${resolvedFrom.name} ${resolvedFrom.currency} -> ${resolvedTo.currency} ${amountNum}`,
+        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim(),
       });
+
+      const refreshedAccounts = await container.accountRepository.getAccounts();
+      const refreshedFrom = refreshedAccounts.find(account => account.accountNumber === resolvedFrom.accountNumber);
+      const refreshedTo = refreshedAccounts.find(account => account.accountNumber === resolvedTo.accountNumber);
+
+      if (
+        !API_CONFIG.USE_MOCK &&
+        refreshedFrom &&
+        refreshedTo &&
+        refreshedFrom.availableBalance === previousFromBalance &&
+        refreshedTo.availableBalance === previousToBalance
+      ) {
+        throw new Error('Konverzija je izracunata, ali backend nije azurirao stanje racuna u bazi.');
+      }
+
+      setCompletedConversion(result);
+      setTotpCode('');
+      onConsumeTotpCode();
       await refreshAccounts();
       setStep('success');
     } catch (e: any) {
-      setSubmitError(e.message ?? 'Greška pri konverziji');
+      if (String(e?.message ?? '').toLowerCase().includes("user doesn't have totp setup")) {
+        onRequireTotpSetup();
+        return;
+      }
+      alert(e.message ?? 'Greška pri konverziji');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getVerificationStepState = (stepId: VerificationStepId): VerificationStepState => {
-    if (submitError && verificationStep === stepId) return 'error';
-    if (!verificationStep) return 'pending';
-
-    const currentIndex = VERIFICATION_STEPS.findIndex(step => step.id === verificationStep);
-    const stepIndex = VERIFICATION_STEPS.findIndex(step => step.id === stepId);
-
-    if (stepIndex < currentIndex || step === 'success') return 'completed';
-    if (stepIndex === currentIndex) return submitting ? 'active' : 'completed';
-    return 'pending';
-  };
-
-  const getStepColors = (state: VerificationStepState) => {
-    switch (state) {
-      case 'completed':
-        return {
-          borderColor: 'rgba(6,214,160,0.28)',
-          backgroundColor: C.accentGlow,
-          iconColor: C.accent,
-          titleColor: C.textPrimary,
-          descriptionColor: C.textSecondary,
-        };
-      case 'active':
-        return {
-          borderColor: 'rgba(59,130,246,0.35)',
-          backgroundColor: C.primaryGlow,
-          iconColor: C.primary,
-          titleColor: C.textPrimary,
-          descriptionColor: C.textSecondary,
-        };
-      case 'error':
-        return {
-          borderColor: 'rgba(239,68,68,0.35)',
-          backgroundColor: C.dangerGlow,
-          iconColor: C.danger,
-          titleColor: C.textPrimary,
-          descriptionColor: '#fca5a5',
-        };
-      default:
-        return {
-          borderColor: C.border,
-          backgroundColor: C.bgCard,
-          iconColor: C.textMuted,
-          titleColor: C.textSecondary,
-          descriptionColor: C.textMuted,
-        };
-    }
-  };
-
-  const getStepIcon = (state: VerificationStepState) => {
-    switch (state) {
-      case 'completed':
-        return 'checkmark-circle';
-      case 'active':
-        return 'time';
-      case 'error':
-        return 'close-circle';
-      default:
-        return 'ellipse-outline';
-    }
-  };
-
-  // ── Loading / error states ──────────────────────────────────────────────────
   if (accountsState.loading || ratesState.loading) {
     return (
       <View style={[styles.flex1, styles.center, { backgroundColor: C.bg }]}>
@@ -283,25 +274,25 @@ export default function ExchangeScreen({ onBack }: Props) {
     );
   }
 
-  const fromPickerAccounts = accounts.filter(a => a.accountNumber !== resolvedTo.accountNumber);
-  const toPickerAccounts   = accounts.filter(a => a.accountNumber !== resolvedFrom.accountNumber);
+  const fromPickerAccounts = exchangeAccounts.filter(a => a.accountNumber !== resolvedTo.accountNumber);
+  const toPickerAccounts   = exchangeAccounts.filter(a => a.accountNumber !== resolvedFrom.accountNumber);
 
-  // ── Success ─────────────────────────────────────────────────────────────────
   if (step === 'success') {
     const successConvertedAmount = completedConversion?.convertedAmount ?? converted;
-    const successRate = completedConversion?.rate ?? activeRate;
 
     return (
       <View style={[styles.flex1, styles.center, { backgroundColor: C.bg, padding: 24 }]}>
         <Ionicons name="checkmark-circle" size={64} color={C.accent} />
         <Text style={styles.successTitle}>Konverzija uspešna!</Text>
-        <Text style={styles.successSub}>Sredstva su konvertovana i upisana u bazu.</Text>
+        <Text style={styles.successSub}>Sredstva su konvertovana između računa.</Text>
         <View style={styles.card}>
           <View style={styles.sRow}><Text style={styles.sLabel}>Sa</Text><Text style={styles.sVal}>{resolvedFrom.name}</Text></View>
           <View style={styles.sRow}><Text style={styles.sLabel}>Na</Text><Text style={styles.sVal}>{resolvedTo.name}</Text></View>
           <View style={styles.sRow}><Text style={styles.sLabel}>Iznos</Text><Text style={styles.sVal}>{fmt(amountNum, resolvedFrom.currency)}</Text></View>
           <View style={styles.sRow}><Text style={styles.sLabel}>Dobijate</Text><Text style={[styles.sVal, { color: C.accent }]}>{fmt(successConvertedAmount, resolvedTo.currency)}</Text></View>
-          <View style={styles.sRow}><Text style={styles.sLabel}>Kurs</Text><Text style={styles.sVal}>1 {foreignCur} = {successRate.toFixed(2)} RSD</Text></View>
+          {completedConversion?.fee !== undefined && <View style={styles.sRow}><Text style={styles.sLabel}>Provizija</Text><Text style={styles.sVal}>{completedConversion.fee}</Text></View>}
+          {completedConversion?.status && <View style={styles.sRow}><Text style={styles.sLabel}>Status</Text><Text style={styles.sVal}>{completedConversion.status}</Text></View>}
+          <View style={styles.sRow}><Text style={styles.sLabel}>Kurs</Text><Text style={styles.sVal}>{rateLabel}</Text></View>
         </View>
         <TouchableOpacity style={styles.primaryBtn} onPress={onBack}>
           <Text style={styles.primaryBtnText}>Nazad na početnu</Text>
@@ -310,7 +301,6 @@ export default function ExchangeScreen({ onBack }: Props) {
     );
   }
 
-  // ── Confirm ──────────────────────────────────────────────────────────────────
   if (step === 'confirm') {
     return (
       <ScrollView style={styles.screenScroll} contentContainerStyle={{ padding: 20 }}>
@@ -326,7 +316,7 @@ export default function ExchangeScreen({ onBack }: Props) {
             ['Na račun',  `${resolvedTo.name} (${resolvedTo.currency})`],
             ['Iznos',     fmt(amountNum, resolvedFrom.currency)],
             ['Dobijate',  fmt(converted, resolvedTo.currency)],
-            ['Kurs',      `1 ${foreignCur} = ${activeRate.toFixed(4)} RSD`],
+            ['Kurs',      rateLabel],
           ].map(([l, v], i) => (
             <View key={l} style={[styles.cRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
               <Text style={styles.cLabel}>{l}</Text>
@@ -334,72 +324,43 @@ export default function ExchangeScreen({ onBack }: Props) {
             </View>
           ))}
         </View>
-        <Text style={styles.previewRate}>
-          Po specifikaciji, potvrda ide kroz verification flow: request, pending, generate code, confirm.
-        </Text>
-        <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>Status verification toka</Text>
-          {VERIFICATION_STEPS.map((verificationStepItem, index) => {
-            const stepState = getVerificationStepState(verificationStepItem.id);
-            const stepColors = getStepColors(stepState);
-            return (
-              <View
-                key={verificationStepItem.id}
-                style={[
-                  styles.statusRow,
-                  {
-                    borderColor: stepColors.borderColor,
-                    backgroundColor: stepColors.backgroundColor,
-                  },
-                  index > 0 && styles.statusRowSpacing,
-                ]}
-              >
-                <View style={[styles.statusIconWrap, { backgroundColor: 'rgba(255,255,255,0.04)' }]}>
-                  <Ionicons name={getStepIcon(stepState)} size={18} color={stepColors.iconColor} />
-                </View>
-                <View style={styles.flex1}>
-                  <Text style={[styles.statusStepTitle, { color: stepColors.titleColor }]}>
-                    {verificationStepItem.title}
-                  </Text>
-                  <Text style={[styles.statusStepDescription, { color: stepColors.descriptionColor }]}>
-                    {verificationStepItem.description}
-                  </Text>
-                </View>
-                <Text style={[styles.statusBadge, { color: stepColors.iconColor }]}>
-                  {stepState === 'completed'
-                    ? 'Gotovo'
-                    : stepState === 'active'
-                      ? 'U toku'
-                      : stepState === 'error'
-                        ? 'Greška'
-                        : 'Čeka'}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-        {!!verificationStatus && <Text style={[styles.previewRate, { color: C.primary }]}>{verificationStatus}</Text>}
-        {!!submitError && <Text style={styles.errorText}>{submitError}</Text>}
+        {!API_CONFIG.USE_MOCK && (
+          <>
+            <Text style={styles.label}>TOTP KOD</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                value={totpCode}
+                onChangeText={setTotpCode}
+                placeholder="Unesite 6-cifreni TOTP kod"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={12}
+              />
+            </View>
+            <Text style={styles.helperText}>
+              {loadingFreshCode
+                ? 'Ucitavam svezi verification kod sa backend-a...'
+                : codeInfo || 'Kod sa mobilnog verification ekrana se ovde popunjava automatski kada je dostupan.'}
+            </Text>
+          </>
+        )}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <TouchableOpacity style={styles.secBtn} onPress={() => setStep('convert')}>
             <Text style={styles.secBtnText}>Nazad</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.primaryBtn, { flex: 1.5, opacity: isValid && !submitting ? 1 : 0.5 }]}
-            disabled={!isValid || submitting}
+            style={[styles.primaryBtn, { flex: 1.5, opacity: isValid && !submitting && (API_CONFIG.USE_MOCK || !!totpCode.trim()) ? 1 : 0.5 }]}
+            disabled={!isValid || submitting || (!API_CONFIG.USE_MOCK && !totpCode.trim())}
             onPress={handleConfirm}
           >
-            {submitting
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.primaryBtnText}>Potvrdi</Text>
-            }
+            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Potvrdi</Text>}
           </TouchableOpacity>
         </View>
       </ScrollView>
     );
   }
 
-  // ── Convert form ─────────────────────────────────────────────────────────────
   if (step === 'convert') {
     return (
       <ScrollView style={styles.screenScroll} contentContainerStyle={{ padding: 20 }}>
@@ -453,22 +414,15 @@ export default function ExchangeScreen({ onBack }: Props) {
           <View style={styles.previewCard}>
             <Text style={styles.previewLabel}>Dobijate približno</Text>
             <Text style={styles.previewAmount}>{fmt(converted, resolvedTo.currency)}</Text>
-            <Text style={styles.previewRate}>
-              Kurs: 1 {foreignCur} = {activeRate.toFixed(2)} RSD ({buying ? 'prodajni' : 'kupovni'})
-            </Text>
+            <Text style={styles.previewRate}>{rateLabel}</Text>
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.primaryBtn, { marginTop: 20, opacity: isValid ? 1 : 0.5 }]}
-          disabled={!isValid}
-          onPress={() => setStep('confirm')}
-        >
+        <TouchableOpacity style={[styles.primaryBtn, { marginTop: 20, opacity: isValid ? 1 : 0.5 }]} disabled={!isValid} onPress={() => setStep('confirm')}>
           <Text style={styles.primaryBtnText}>Nastavi</Text>
         </TouchableOpacity>
 
-        {/* Account pickers */}
-        {[
+        {[ 
           { visible: showFrom, setVisible: setShowFrom, setAcc: setFromAcc, accs: fromPickerAccounts },
           { visible: showTo,   setVisible: setShowTo,   setAcc: setToAcc,   accs: toPickerAccounts  },
         ].map((p, i) => (
@@ -481,15 +435,17 @@ export default function ExchangeScreen({ onBack }: Props) {
                     <Ionicons name="close" size={24} color={C.textSecondary} />
                   </TouchableOpacity>
                 </View>
-                {p.accs.map((a, index) => (
-                  <TouchableOpacity key={`exchange-picker-${a.id}-${a.accountNumber}-${a.currency}-${a.name}-${index}`} style={styles.mItem} onPress={() => { p.setAcc(a); p.setVisible(false); }}>
-                    <View style={styles.mItemIcon}><Ionicons name="wallet" size={18} color={C.primary} /></View>
-                    <View style={styles.flex1}>
-                      <Text style={styles.mItemTitle}>{a.name} ({a.currency})</Text>
-                      <Text style={styles.mItemSub}>{fmt(a.availableBalance, a.currency)}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+                  {p.accs.map((a, index) => (
+                    <TouchableOpacity key={`${a.accountNumber}-${index}`} style={styles.mItem} onPress={() => { p.setAcc(a); p.setVisible(false); }}>
+                      <View style={styles.mItemIcon}><Ionicons name="wallet" size={18} color={C.primary} /></View>
+                      <View style={styles.flex1}>
+                        <Text style={styles.mItemTitle}>{a.name} ({a.currency})</Text>
+                        <Text style={styles.mItemSub}>{fmt(a.availableBalance, a.currency)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
             </View>
           </Modal>
@@ -498,7 +454,6 @@ export default function ExchangeScreen({ onBack }: Props) {
     );
   }
 
-  // ── Rates list ───────────────────────────────────────────────────────────────
   return (
     <ScrollView style={styles.screenScroll} contentContainerStyle={{ padding: 20 }}>
       <View style={styles.hRow}>
@@ -512,13 +467,13 @@ export default function ExchangeScreen({ onBack }: Props) {
         <Ionicons name="swap-horizontal" size={22} color="#fff" />
         <View style={styles.flex1}>
           <Text style={styles.bannerTitle}>Konvertuj valutu</Text>
-          <Text style={styles.bannerSub}>Prenos između tekućeg i deviznog računa</Text>
+          <Text style={styles.bannerSub}>Menjačnica između tekućeg i deviznog računa</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
 
       <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 4 }]}>Kursna lista</Text>
-      <Text style={styles.rateDate}>Datum: {new Date().toLocaleDateString('sr-RS')}</Text>
+      <Text style={styles.rateDate}>Datum: {fmtDateFromDate(new Date())}</Text>
 
       <View style={styles.rateHeader}>
         <Text style={[styles.rateHText, { flex: 1 }]}>Valuta</Text>
@@ -527,9 +482,9 @@ export default function ExchangeScreen({ onBack }: Props) {
         <Text style={[styles.rateHText, { width: 80, textAlign: 'right' }]}>Prodajni</Text>
       </View>
 
-      {rates.map(r => (
-        <View key={r.fromCurrency} style={styles.rateRow}>
-          <View style={[styles.row, { flex: 1, gap: 8 }]}>
+      {rates.map((r, index) => (
+        <View key={`${r.fromCurrency}-${r.toCurrency}-${r.buyRate}-${r.sellRate}-${index}`} style={styles.rateRow}>
+          <View style={[styles.row, { flex: 1, gap: 8 }]}> 
             <View style={styles.flagBadge}><Text style={styles.flagText}>{r.fromCurrency}</Text></View>
             <Text style={styles.rateCur}>{r.fromCurrency}/RSD</Text>
           </View>
@@ -575,6 +530,7 @@ const styles = StyleSheet.create({
   previewAmount: { color: C.accent, fontSize: 24, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
   previewRate: { color: C.textMuted, fontSize: 11, marginTop: 6 },
   errorText: { color: '#ff6b6b', fontSize: 12, marginTop: 8 },
+  helperText: { color: C.textMuted, fontSize: 12, marginTop: 8, marginBottom: 16 },
   primaryBtn: { backgroundColor: C.primary, borderRadius: 14, padding: 16, alignItems: 'center', shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secBtn: { flex: 1, backgroundColor: C.bgCard, borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: C.border },
@@ -583,14 +539,6 @@ const styles = StyleSheet.create({
   cRow: { padding: 14, paddingHorizontal: 18 },
   cLabel: { color: C.textMuted, fontSize: 11, fontWeight: '500', textTransform: 'uppercase' },
   cVal: { color: C.textPrimary, fontSize: 14, fontWeight: '500', marginTop: 4 },
-  statusCard: { backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 16, marginBottom: 12 },
-  statusTitle: { color: C.textPrimary, fontSize: 14, fontWeight: '700', marginBottom: 12 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 12 },
-  statusRowSpacing: { marginTop: 10 },
-  statusIconWrap: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  statusStepTitle: { fontSize: 13, fontWeight: '700' },
-  statusStepDescription: { fontSize: 11, marginTop: 2 },
-  statusBadge: { fontSize: 11, fontWeight: '700', marginLeft: 8, textTransform: 'uppercase' },
   card: { backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 18, width: '100%', marginBottom: 24 },
   sRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   sLabel: { color: C.textMuted, fontSize: 13 },

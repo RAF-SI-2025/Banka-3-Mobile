@@ -1,166 +1,217 @@
 import { ApiError, NetworkClient } from '../../../core/network/NetworkClient';
 import { VerificationRequest } from '../../../shared/types/models';
-import {
-  CreatedVerificationRequest,
-  IVerificationRepository,
-  PendingVerificationDetails,
-  VerificationRequestPayload,
-} from '../domain/IVerificationRepository';
-import { MockVerificationRepository } from './MockVerificationRepository';
+import { IVerificationRepository } from '../domain/IVerificationRepository';
 
-interface VerificationRequestApiResponse {
-  verification_id?: string;
-  verificationId?: string;
-  expires_in?: number | string;
-  expiresIn?: number | string;
-  max_attempts?: number | string;
-  maxAttempts?: number | string;
+interface VerificationApiResponse {
+  id?: number | string;
+  action?: string;
+  description?: string;
+  amount?: string;
+  recipientName?: string;
+  recipient_name?: string;
+  recipientAccount?: string;
+  recipient_account?: string;
+  sourceAccount?: string;
+  source_account?: string;
+  timestamp?: string;
   status?: string;
-}
-
-interface PendingVerificationApiResponse {
-  id?: string | number;
-  verification_id?: string;
-  type?: string;
-  status?: string;
-  expires_at?: string;
-  expiresAt?: string;
-  attempts_left?: number | string;
-  attemptsLeft?: number | string;
-  payload?: VerificationRequestPayload;
-}
-
-interface GeneratedCodeApiResponse {
   code?: string;
-  expires_in?: number | string;
-  expiresIn?: number | string;
 }
 
-interface ConfirmVerificationApiResponse {
-  status?: string;
-  transaction_status?: string;
-  transactionStatus?: string;
-  result?: Record<string, unknown>;
+interface VerificationListApiResponse {
+  items?: VerificationApiResponse[];
+  data?: VerificationApiResponse[];
+  verifications?: VerificationApiResponse[];
+  requests?: VerificationApiResponse[];
 }
+
+const PENDING_ENDPOINTS = [
+  '/api/verification/pending',
+  '/api/verifications/pending',
+  '/api/transactions/verification/pending',
+  '/api/transactions/pending-verification',
+];
+
+const HISTORY_ENDPOINTS = [
+  '/api/verification/history',
+  '/api/verifications/history',
+  '/api/transactions/verification/history',
+  '/api/transactions/verification-requests',
+];
+
+const CONFIRM_ENDPOINTS = (id: number) => [
+  `/api/verification/${id}/confirm`,
+  `/api/verifications/${id}/confirm`,
+  `/api/transactions/${id}/confirm-verification`,
+  '/api/verification/confirm',
+  '/api/verifications/confirm',
+  '/api/transactions/confirm-verification',
+];
+
+const REJECT_ENDPOINTS = (id: number) => [
+  `/api/verification/${id}/reject`,
+  `/api/verifications/${id}/reject`,
+  `/api/transactions/${id}/reject-verification`,
+  '/api/verification/reject',
+  '/api/verifications/reject',
+  '/api/transactions/reject-verification',
+];
 
 export class VerificationRepository implements IVerificationRepository {
-  private fallbackRepository = new MockVerificationRepository();
-
   constructor(private client: NetworkClient) {}
 
   async getHistory(): Promise<VerificationRequest[]> {
-    return this.fallbackRepository.getHistory();
+    const response = await this.tryGet<VerificationApiResponse[] | VerificationListApiResponse>(HISTORY_ENDPOINTS);
+    return this.mapList(response);
   }
 
   async getPending(): Promise<VerificationRequest | null> {
-    return this.fallbackRepository.getPending();
+    const response = await this.tryGet<VerificationApiResponse | null>(PENDING_ENDPOINTS);
+    if (!response) {
+      return null;
+    }
+
+    return this.mapRequest(response);
   }
 
   async confirm(id: number): Promise<void> {
-    return this.fallbackRepository.confirm(id);
+    await this.tryAction(CONFIRM_ENDPOINTS(id), id, 'confirm');
   }
 
   async reject(id: number): Promise<void> {
-    return this.fallbackRepository.reject(id);
+    await this.tryAction(REJECT_ENDPOINTS(id), id, 'reject');
   }
 
-  async createVerificationRequest(
-    type: string,
-    payload: VerificationRequestPayload
-  ): Promise<CreatedVerificationRequest> {
-    const response = await this.client.post<VerificationRequestApiResponse>('/api/verification/request', {
-      type,
-      payload,
-    }, {
-      retryOnUnauthorized: false,
-    });
+  private async tryGet<T>(endpoints: string[]): Promise<T> {
+    let lastError: unknown;
 
-    const verificationId = response.verification_id ?? response.verificationId;
-    if (!verificationId) {
-      throw new Error('Backend nije vratio verification_id.');
+    for (const endpoint of endpoints) {
+      try {
+        return await this.client.get<T>(endpoint);
+      } catch (error) {
+        if (!this.shouldTryNextEndpoint(error)) {
+          throw error;
+        }
+
+        lastError = error;
+      }
     }
 
+    throw this.toNotFoundError('verifikacioni endpoint', lastError);
+  }
+
+  private async tryAction(
+    endpoints: string[],
+    id: number,
+    action: 'confirm' | 'reject'
+  ): Promise<void> {
+    let lastError: unknown;
+    const bodies = this.buildActionBodies(id, action);
+
+    for (const endpoint of endpoints) {
+      for (const body of bodies) {
+        try {
+          if (body === undefined) {
+            await this.client.post(endpoint);
+          } else {
+            await this.client.post(endpoint, body);
+          }
+
+          return;
+        } catch (error) {
+          if (!this.shouldTryNextEndpoint(error)) {
+            if (this.shouldTryNextActionBody(error)) {
+              lastError = error;
+              continue;
+            }
+
+            throw error;
+          }
+
+          lastError = error;
+        }
+      }
+    }
+
+    throw this.toNotFoundError('verifikaciona akcija', lastError);
+  }
+
+  private mapList(response: VerificationApiResponse[] | VerificationListApiResponse): VerificationRequest[] {
+    const items = Array.isArray(response)
+      ? response
+      : response.items ?? response.data ?? response.verifications ?? response.requests ?? [];
+
+    return items.map(item => this.mapRequest(item));
+  }
+
+  private mapRequest(item: VerificationApiResponse): VerificationRequest {
     return {
-      verificationId,
-      expiresIn: this.toNumber(response.expires_in ?? response.expiresIn, 300),
-      maxAttempts: this.toNumber(response.max_attempts ?? response.maxAttempts, 3),
-      status: response.status ?? 'pending',
+      id: Number(item.id ?? 0),
+      action: item.action ?? 'Nepoznata transakcija',
+      description: item.description ?? '',
+      amount: item.amount,
+      recipientName: item.recipientName ?? item.recipient_name,
+      recipientAccount: item.recipientAccount ?? item.recipient_account,
+      sourceAccount: item.sourceAccount ?? item.source_account,
+      timestamp: item.timestamp ?? new Date().toISOString(),
+      status: this.normalizeStatus(item.status),
+      code: item.code,
     };
   }
 
-  async getPendingVerification(): Promise<PendingVerificationDetails | null> {
-    try {
-      const response = await this.client.get<PendingVerificationApiResponse>('/api/verification/pending', {
-        retryOnUnauthorized: false,
-      });
-
-      const id = this.toStringId(response.id ?? response.verification_id);
-      if (!id) {
-        return null;
-      }
-
-      return {
+  private buildActionBodies(id: number, action: 'confirm' | 'reject'): Array<Record<string, unknown> | undefined> {
+    return [
+      undefined,
+      { id },
+      { verificationId: id },
+      { verification_id: id },
+      { id, action },
+      { verificationId: id, action },
+      { verification_id: id, action },
+      { id, status: action === 'confirm' ? 'confirmed' : 'rejected' },
+      {
         id,
-        type: response.type ?? 'exchange',
-        status: response.status ?? 'pending',
-        expiresAt: response.expires_at ?? response.expiresAt,
-        attemptsLeft: this.toNumber(response.attempts_left ?? response.attemptsLeft, 3),
-        payload: response.payload,
-      };
-    } catch (error) {
-      if (error instanceof ApiError && error.statusCode === 404) {
-        return null;
-      }
+        verificationId: id,
+        verification_id: id,
+        action,
+        status: action === 'confirm' ? 'confirmed' : 'rejected',
+      },
+    ];
+  }
 
-      throw error;
+  private normalizeStatus(status?: string): VerificationRequest['status'] {
+    switch ((status ?? '').toLowerCase()) {
+      case 'confirmed':
+      case 'approved':
+      case 'accepted':
+      case 'done':
+        return 'confirmed';
+      case 'rejected':
+      case 'denied':
+      case 'declined':
+        return 'rejected';
+      case 'expired':
+      case 'timeout':
+        return 'expired';
+      default:
+        return 'pending';
     }
   }
 
-  async generateVerificationCode(verificationId: string): Promise<{ code: string; expiresIn: number }> {
-    const response = await this.client.post<GeneratedCodeApiResponse>('/api/verification/code/generate', {
-      verification_id: verificationId,
-    }, {
-      retryOnUnauthorized: false,
-    });
-
-    if (!response.code) {
-      throw new Error('Backend nije vratio verifikacioni kod.');
-    }
-
-    return {
-      code: response.code,
-      expiresIn: this.toNumber(response.expires_in ?? response.expiresIn, 300),
-    };
+  private shouldTryNextEndpoint(error: unknown): boolean {
+    return error instanceof ApiError && (error.statusCode === 0 || error.statusCode === 404);
   }
 
-  async confirmVerification(
-    verificationId: string,
-    code: string
-  ): Promise<{ status: string; transactionStatus?: string; result?: Record<string, unknown> }> {
-    const response = await this.client.post<ConfirmVerificationApiResponse>('/api/verification/confirm', {
-      verification_id: verificationId,
-      code: code.trim(),
-    }, {
-      retryOnUnauthorized: false,
-    });
-
-    return {
-      status: response.status ?? 'confirmed',
-      transactionStatus: response.transaction_status ?? response.transactionStatus,
-      result: response.result,
-    };
+  private shouldTryNextActionBody(error: unknown): boolean {
+    return (
+      error instanceof ApiError &&
+      (error.statusCode === 400 || error.statusCode === 422) &&
+      /invalid request body/i.test(error.message)
+    );
   }
 
-  private toNumber(value: number | string | undefined, fallback: number): number {
-    const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
-    return Number.isFinite(parsed) ? (parsed as number) : fallback;
-  }
-
-  private toStringId(value: number | string | undefined): string {
-    if (value === undefined || value === null) {
-      return '';
-    }
-
-    return String(value);
+  private toNotFoundError(label: string, lastError: unknown): Error {
+    const message = lastError instanceof Error ? lastError.message : 'Nepoznata greška';
+    return new Error(`Backend ne izlaže podržan ${label}. Poslednja greška: ${message}`);
   }
 }

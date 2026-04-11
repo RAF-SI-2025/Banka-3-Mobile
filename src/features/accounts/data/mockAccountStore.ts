@@ -1,9 +1,68 @@
 import { Account, Transaction } from '../../../shared/types/models';
 
 const ACCOUNTS: Account[] = [
-  { id: 1, accountNumber: '265-0000000011234-56', ownerId: 1, name: 'Tekuci racun', type: 'tekuci', currency: 'RSD', balance: 347250.0, availableBalance: 335750.0, reservedAmount: 11500.0, status: 'active', createdAt: '2023-06-15', expiresAt: '2028-06-15' },
-  { id: 2, accountNumber: '265-0000000011234-78', ownerId: 1, name: 'Devizni racun', type: 'devizni', currency: 'EUR', balance: 2150.0, availableBalance: 2150.0, reservedAmount: 0, status: 'active', createdAt: '2023-06-15', expiresAt: '2028-06-15' },
-  { id: 3, accountNumber: '265-0000000011234-90', ownerId: 1, name: 'Stedni racun', type: 'stedni', currency: 'RSD', balance: 1200000.0, availableBalance: 1200000.0, reservedAmount: 0, status: 'active', createdAt: '2024-01-10', expiresAt: '2029-01-10' },
+  {
+    id: 1,
+    accountNumber: '265-0000000011234-56',
+    ownerId: 1,
+    ownerName: 'Marko Petrović',
+    name: 'Tekuci racun',
+    type: 'tekuci',
+    subtype: 'Standardni',
+    currency: 'RSD',
+    balance: 347250.0,
+    availableBalance: 335750.0,
+    reservedAmount: 11500.0,
+    status: 'active',
+    createdAt: '2023-06-15',
+    expiresAt: '2028-06-15',
+    monthlyMaintenance: 255.0,
+    dailyLimit: 250000.0,
+    monthlyLimit: 1000000.0,
+    dailySpent: 18240.5,
+    monthlySpent: 87430.0,
+  },
+  {
+    id: 2,
+    accountNumber: '265-0000000011234-78',
+    ownerId: 1,
+    ownerName: 'Marko Petrović',
+    name: 'Devizni racun',
+    type: 'devizni',
+    subtype: 'Licni',
+    currency: 'EUR',
+    balance: 2150.0,
+    availableBalance: 2150.0,
+    reservedAmount: 0,
+    status: 'active',
+    createdAt: '2023-06-15',
+    expiresAt: '2028-06-15',
+    dailyLimit: 5000.0,
+    monthlyLimit: 20000.0,
+    dailySpent: 89.99,
+    monthlySpent: 420.0,
+  },
+  {
+    id: 3,
+    accountNumber: '265-0000000011234-90',
+    ownerId: 1,
+    ownerName: 'Marko Petrović',
+    name: 'Poslovni devizni racun',
+    type: 'poslovni',
+    subtype: 'DOO',
+    companyName: 'Petrovic Consulting DOO',
+    currency: 'USD',
+    balance: 9800.0,
+    availableBalance: 9600.0,
+    reservedAmount: 200.0,
+    status: 'active',
+    createdAt: '2024-01-10',
+    expiresAt: '2029-01-10',
+    dailyLimit: 15000.0,
+    monthlyLimit: 75000.0,
+    dailySpent: 1250.0,
+    monthlySpent: 11200.0,
+  },
 ];
 
 const TRANSACTIONS: Transaction[] = [
@@ -47,6 +106,30 @@ export function getMockTransactions(accountId: number): Transaction[] {
   return TRANSACTIONS.filter(transaction => transaction.accountId === accountId).map(cloneTransaction);
 }
 
+export function updateMockAccountName(accountNumber: string, name: string): void {
+  const account = ACCOUNTS.find(item => item.accountNumber === accountNumber);
+  if (!account) {
+    throw new Error('Racun nije pronadjen');
+  }
+
+  account.name = name;
+}
+
+export function updateMockAccountLimits(accountNumber: string, updates: { dailyLimit?: number; monthlyLimit?: number }): void {
+  const account = ACCOUNTS.find(item => item.accountNumber === accountNumber);
+  if (!account) {
+    throw new Error('Racun nije pronadjen');
+  }
+
+  if (updates.dailyLimit !== undefined) {
+    account.dailyLimit = updates.dailyLimit;
+  }
+
+  if (updates.monthlyLimit !== undefined) {
+    account.monthlyLimit = updates.monthlyLimit;
+  }
+}
+
 export function applyMockExchangeTransfer(params: {
   fromAccountId: number;
   toAccountId: number;
@@ -73,13 +156,13 @@ export function applyMockExchangeTransfer(params: {
   toAccount.availableBalance += params.toAmount;
 
   const timestamp = formatNow();
-  const roundedRate = params.rate.toFixed(4);
+  const roundedRate = params.rate.toFixed(2);
 
   TRANSACTIONS.unshift(
     {
       id: nextTransactionId(),
       accountId: fromAccount.id,
-      description: `Konverzija u ${params.toCurrency}`,
+      description: `Menjačnica - odlazna konverzija`,
       amount: -params.fromAmount,
       currency: params.fromCurrency,
       date: timestamp,
@@ -91,7 +174,7 @@ export function applyMockExchangeTransfer(params: {
     {
       id: nextTransactionId() + 1,
       accountId: toAccount.id,
-      description: `Konverzija iz ${params.fromCurrency}`,
+      description: `Menjačnica - dolazna konverzija`,
       amount: params.toAmount,
       currency: params.toCurrency,
       date: timestamp,

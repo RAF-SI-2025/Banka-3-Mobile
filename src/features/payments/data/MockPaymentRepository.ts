@@ -1,13 +1,13 @@
-import { IPaymentRepository } from '../domain/IPaymentRepository';
+import { IPaymentRepository, PaymentRequest, TransferRequest } from '../domain/IPaymentRepository';
 import { PaymentRecipient, PaymentOrder, Transaction } from '../../../shared/types/models';
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 let recipients: PaymentRecipient[] = [
-  { id: 1, name: 'EPS Beograd', accountNumber: '160-0000000123456-78' },
-  { id: 2, name: 'Telenor Srbija', accountNumber: '170-0000000654321-90' },
-  { id: 3, name: 'Vodovod Beograd', accountNumber: '908-0000000987654-32' },
-  { id: 4, name: 'Ana Jovanović', accountNumber: '265-0000000099887-11' },
+  { id: 1, name: 'EPS Beograd', accountNumber: '333000112345678910' },
+  { id: 2, name: 'Telenor Srbija', accountNumber: '333000112345678910' },
+  { id: 3, name: 'Vodovod Beograd', accountNumber: '333000112345678910' },
+  { id: 4, name: 'Ana Jovanović', accountNumber: '333000112345678910' },
 ];
 
 const paymentHistory: Transaction[] = [
@@ -33,5 +33,13 @@ export class MockPaymentRepository implements IPaymentRepository {
   }
   async deleteRecipient(id: number): Promise<void> { await delay(400); recipients = recipients.filter(r => r.id !== id); }
   async createPayment(order: PaymentOrder): Promise<{ verificationId: number }> { await delay(1000); return { verificationId: Math.floor(Math.random() * 10000) }; }
+  async submitPayment(_request: PaymentRequest): Promise<{ status?: string; message?: string }> {
+    await delay(1000);
+    return { status: 'completed', message: 'Payment submitted' };
+  }
+  async submitTransfer(_request: TransferRequest): Promise<{ status?: string; message?: string }> {
+    await delay(1000);
+    return { status: 'completed', message: 'Payment submitted' };
+  }
   async getPaymentHistory(): Promise<Transaction[]> { await delay(500); return paymentHistory; }
 }

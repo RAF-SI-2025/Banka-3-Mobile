@@ -24,10 +24,10 @@ export const MOCK_TRANSACTIONS = [
 
 export const MOCK_VERIFICATIONS = [
   { id: 1, action: 'Plaćanje - EPS Beograd', amount: '4,580.00 RSD', date: '05.03.2025 14:32', status: 'confirmed' as const },
-  { id: 2, action: 'Prenos između računa', amount: '500.00 EUR', date: '03.03.2025 09:15', status: 'confirmed' as const },
+  { id: 2, action: 'Menjačnica - odlazna konverzija', amount: '500.00 EUR', date: '03.03.2025 09:15', status: 'confirmed' as const },
   { id: 3, action: 'Novo plaćanje - Telenor', amount: '2,890.00 RSD', date: '01.03.2025 18:44', status: 'rejected' as const },
   { id: 4, action: 'Plaćanje - Informatika AD', amount: '15,420.00 RSD', date: '28.02.2025 10:20', status: 'confirmed' as const },
-  { id: 5, action: 'Prenos na devizni račun', amount: '200.00 EUR', date: '25.02.2025 11:05', status: 'expired' as const },
+  { id: 5, action: 'Menjačnica - dolazna konverzija', amount: '200.00 EUR', date: '25.02.2025 11:05', status: 'expired' as const },
 ];
 
 export const MOCK_PENDING = {
@@ -38,10 +38,10 @@ export const MOCK_PENDING = {
 };
 
 export const MOCK_RECIPIENTS = [
-  { id: 1, name: 'EPS Beograd', account: '160-0000000123456-78' },
-  { id: 2, name: 'Telenor Srbija', account: '170-0000000654321-90' },
-  { id: 3, name: 'Vodovod Beograd', account: '908-0000000987654-32' },
-  { id: 4, name: 'Ana Jovanović', account: '265-0000000099887-11' },
+  { id: 1, name: 'EPS Beograd', account: '333000112345678910' },
+  { id: 2, name: 'Telenor Srbija', account: '333000112345678910' },
+  { id: 3, name: 'Vodovod Beograd', account: '333000112345678910' },
+  { id: 4, name: 'Ana Jovanović', account: '333000112345678910' },
 ];
 
 export const MOCK_CARDS = [

@@ -1,16 +1,26 @@
 import { IAccountRepository } from '../domain/IAccountRepository';
-import { Account, Transaction } from '../../../shared/types/models';
+import { Account, AccountLimitUpdate, Transaction } from '../../../shared/types/models';
 import { ApiError, NetworkClient } from '../../../core/network/NetworkClient';
+import { MockAccountRepository } from './MockAccountRepository';
 
-interface ApiAccount {
-  account_number: string;
+interface AccountApiResponse {
+  id?: number | string;
+  accountId?: number | string;
+  account_id?: number | string;
+  accountNumber?: string;
+  account_number?: string;
   account_name?: string;
-  name?: string;
-  account_name?: string;
-  type?: string;
   account_type?: string;
+  ownerId?: number | string;
+  owner_id?: number | string;
+  ownerName?: string;
+  owner_name?: string;
+  name?: string;
+  type?: string;
+  subtype?: string;
+  companyName?: string;
+  company_name?: string;
   currency?: string;
-  currency_code?: string;
   balance?: number | string;
   availableBalance?: number | string;
   available_balance?: number | string;
@@ -23,97 +33,58 @@ interface ApiAccount {
   expiresAt?: string;
   expires_at?: string;
   expiration_date?: string;
+  monthlyMaintenance?: number | string;
+  monthly_maintenance?: number | string;
+  dailyLimit?: number | string;
+  daily_limit?: number | string;
+  monthlyLimit?: number | string;
+  monthly_limit?: number | string;
+  dailySpent?: number | string;
+  daily_spent?: number | string;
+  daily_spending?: number | string;
+  monthlySpent?: number | string;
+  monthly_spent?: number | string;
+  monthly_spending?: number | string;
 }
-
-type AccountListApiResponse =
-  | AccountApiResponse[]
-  | {
-      value?: AccountApiResponse[];
-      data?: AccountApiResponse[];
-    };
 
 interface TransactionApiResponse {
   id?: number | string;
   accountId?: number | string;
   account_id?: number | string;
+  accountNumber?: string;
+  account_number?: string;
+  type?: string;
   description?: string;
   desc?: string;
   amount?: number | string;
+  initial_amount?: number | string;
+  final_amount?: number | string;
+  start_currency_id?: number | string;
+  exchange_rate?: number | string;
   currency?: string;
-  purpose?: string;
-  payment_code?: string;
-  reference_number?: string;
-  status?: string;
-  timestamp?: string;
   date?: string;
-  description?: string;
-}
-
-// accountNumber string → stable numeric hash za id
-function accountNumberToId(accountNumber: string): number {
-  let hash = 0;
-  for (let i = 0; i < accountNumber.length; i++) {
-    hash = (hash * 31 + accountNumber.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-}
-
-function mapAccountType(type: string | undefined): Account['type'] {
-  const t = type?.toLowerCase() ?? '';
-  if (t.includes('foreign') || t.includes('devizni')) return 'devizni';
-  if (t.includes('savings') || t.includes('stedni')) return 'stedni';
-  if (t.includes('business') || t.includes('poslovni')) return 'poslovni';
-  return 'tekuci';
-}
-
-function mapAccount(a: ApiAccount): Account {
-  return {
-    id: accountNumberToId(a.account_number),
-    accountNumber: a.account_number,
-    ownerId: a.owner_id ?? 0,
-    name: a.account_name ?? a.name ?? 'Račun',
-    type: mapAccountType(a.account_type),
-    currency: a.currency ?? 'RSD',
-    balance: a.balance ?? 0,
-    availableBalance: a.available_balance ?? a.balance ?? 0,
-    reservedAmount: 0,
-    status: a.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
-    createdAt: a.creation_date ?? '',
-    expiresAt: a.expiration_date ?? '',
-  };
-}
-
-function mapTransaction(t: ApiTransaction, accountId: number, index: number): Transaction {
-  const amount = t.final_amount ?? t.initial_amount ?? t.amount ?? 0;
-  const rawStatus = t.status?.toLowerCase() ?? '';
-  let status: Transaction['status'] = 'completed';
-  if (rawStatus.includes('pending') || rawStatus.includes('obrada')) status = 'pending';
-  else if (rawStatus.includes('reject') || rawStatus.includes('odbij')) status = 'rejected';
-
-  return {
-    id: index,
-    accountId,
-    description: t.purpose ?? t.description ?? 'Transakcija',
-    amount,
-    currency: t.currency ?? 'RSD',
-    date: t.timestamp ? new Date(t.timestamp).toLocaleDateString('sr-RS') : (t.date ?? ''),
-    status,
-    recipientName: undefined,
-    recipientAccount: t.to_account,
-    paymentCode: t.payment_code,
-    purpose: t.purpose,
-  };
+  timestamp?: string;
+  status?: string;
+  recipientName?: string;
+  recipient_name?: string;
+  recipientAccount?: string;
+  recipient_account?: string;
+  from_account?: string;
+  to_account?: string;
+  paymentCode?: string;
+  payment_code?: string;
+  purpose?: string;
 }
 
 export class AccountRepository implements IAccountRepository {
+  private fallbackRepository = new MockAccountRepository();
+
   constructor(private client: NetworkClient) {}
 
   async getAccounts(): Promise<Account[]> {
     try {
-      const data = await this.client.get<AccountListApiResponse>('/api/accounts');
-      const accounts = this.getUniqueAccounts(
-        this.unwrapAccountsResponse(data).map(account => this.mapAccount(account))
-      );
+      const data = await this.client.get<AccountApiResponse[]>('/api/accounts');
+      const accounts = data.map(account => this.mapAccount(account));
       if (accounts.length > 0) {
         return accounts;
       }
@@ -128,22 +99,21 @@ export class AccountRepository implements IAccountRepository {
 
   async getAccountById(id: number): Promise<Account> {
     const accounts = await this.getAccounts();
-    const account = accounts.find(a => a.id === id);
-    if (!account) throw new Error('Račun nije pronađen');
+    const account = accounts.find(item => item.id === id);
+    if (!account) throw new Error('Racun nije pronadjen');
     return account;
   }
 
   async getTransactions(accountId: number): Promise<Transaction[]> {
     if (!accountId) return [];
-    const accounts = await this.getAccounts();
-    const account = accounts.find(a => a.id === accountId);
-    if (!account) return [];
+
+    const account = await this.getAccountById(accountId);
 
     try {
-      const data = await this.client.get<TransactionApiResponse[]>(`/api/transactions?accountId=${accountId}`);
-      if (data.length > 0) {
-        return data.map(transaction => this.mapTransaction(transaction, accountId));
-      }
+      const data = await this.client.get<TransactionApiResponse[]>(
+        `/api/transactions?account_number=${encodeURIComponent(account.accountNumber)}`
+      );
+      return data.map(transaction => this.mapTransaction(transaction, accountId, account.accountNumber, account.currency));
     } catch (error) {
       if (!this.shouldUseMockFallback(error)) {
         throw error;
@@ -153,98 +123,263 @@ export class AccountRepository implements IAccountRepository {
     return this.fallbackRepository.getTransactions(accountId);
   }
 
+  async updateAccountName(accountNumber: string, name: string): Promise<void> {
+    await this.client.patch(`/api/accounts/${encodeURIComponent(accountNumber)}/name`, {
+      name,
+    });
+  }
+
+  async updateAccountLimits(accountNumber: string, updates: AccountLimitUpdate): Promise<void> {
+    const headers = updates.totpCode ? { TOTP: updates.totpCode } : undefined;
+    await this.client.patch(
+      `/api/accounts/${encodeURIComponent(accountNumber)}/limit`,
+      {
+        daily_limit: updates.dailyLimit,
+        monthly_limit: updates.monthlyLimit,
+      },
+      headers
+    );
+  }
+
   private mapAccount(account: AccountApiResponse): Account {
     const accountNumber = account.accountNumber ?? account.account_number ?? '';
-    const fallbackId = this.getFallbackAccountId(accountNumber);
-    const normalizedStatus = (account.status ?? '').toLowerCase();
 
     return {
-      id: this.toNumber(account.id ?? account.accountId ?? account.account_id ?? fallbackId),
+      id: this.resolveAccountId(account, accountNumber),
       accountNumber,
       ownerId: this.toNumber(account.ownerId ?? account.owner_id ?? 0),
+      ownerName: account.ownerName ?? account.owner_name,
       name: account.name ?? account.account_name ?? 'Racun',
       type: this.mapAccountType(account.type ?? account.account_type),
-      currency: account.currency ?? account.currency_code ?? 'RSD',
+      subtype: account.subtype,
+      companyName: account.companyName ?? account.company_name,
+      currency: account.currency ?? 'RSD',
       balance: this.toNumber(account.balance),
       availableBalance: this.toNumber(account.availableBalance ?? account.available_balance ?? account.balance ?? 0),
       reservedAmount: this.toNumber(account.reservedAmount ?? account.reserved_amount ?? 0),
-      status: normalizedStatus === 'inactive' ? 'inactive' : 'active',
+      status: account.status === 'inactive' ? 'inactive' : 'active',
       createdAt: account.createdAt ?? account.created_at ?? account.creation_date ?? '',
       expiresAt: account.expiresAt ?? account.expires_at ?? account.expiration_date ?? '',
+      monthlyMaintenance: this.toNumber(account.monthlyMaintenance ?? account.monthly_maintenance),
+      dailyLimit: this.toNumber(account.dailyLimit ?? account.daily_limit),
+      monthlyLimit: this.toNumber(account.monthlyLimit ?? account.monthly_limit),
+      dailySpent: this.toNumber(account.dailySpent ?? account.daily_spent ?? account.daily_spending),
+      monthlySpent: this.toNumber(account.monthlySpent ?? account.monthly_spent ?? account.monthly_spending),
     };
   }
 
-  private mapTransaction(transaction: TransactionApiResponse, fallbackAccountId: number): Transaction {
+  private mapTransaction(
+    transaction: TransactionApiResponse,
+    fallbackAccountId: number,
+    fallbackAccountNumber?: string,
+    fallbackAccountCurrency?: string
+  ): Transaction {
+    const fromAccount = transaction.from_account;
+    const toAccount = transaction.to_account;
+    const accountNumber = transaction.accountNumber ?? transaction.account_number ?? fallbackAccountNumber;
+    const initialAmount = this.toOptionalNumber(transaction.amount ?? transaction.initial_amount) ?? 0;
+    const finalAmount = this.toOptionalNumber(transaction.final_amount);
+    const signedAmount =
+      accountNumber && fromAccount === accountNumber
+        ? -Math.abs(initialAmount)
+        : accountNumber && toAccount === accountNumber
+          ? Math.abs(finalAmount ?? initialAmount)
+          : initialAmount;
+
     return {
-      id: this.toNumber(transaction.id),
+      id: this.resolveTransactionId(transaction),
       accountId: this.toNumber(transaction.accountId ?? transaction.account_id ?? fallbackAccountId),
-      description: transaction.description ?? transaction.desc ?? 'Transakcija',
-      amount: this.toNumber(transaction.amount),
+      description: this.resolveTransactionDescription(transaction, accountNumber, fallbackAccountCurrency),
+      amount: signedAmount,
       currency: transaction.currency ?? 'RSD',
-      date: transaction.date ?? '',
+      date: transaction.date ?? transaction.timestamp ?? '',
       status: transaction.status === 'pending' || transaction.status === 'rejected' ? transaction.status : 'completed',
       recipientName: transaction.recipientName ?? transaction.recipient_name,
-      recipientAccount: transaction.recipientAccount ?? transaction.recipient_account,
+      recipientAccount: transaction.recipientAccount ?? transaction.recipient_account ?? toAccount,
       paymentCode: transaction.paymentCode ?? transaction.payment_code,
       purpose: transaction.purpose,
     };
   }
 
-  private mapAccountType(type: string | undefined): Account['type'] {
-    const normalizedType = (type ?? '').toLowerCase();
+  private resolveTransactionDescription(
+    transaction: TransactionApiResponse,
+    accountNumber?: string,
+    accountCurrency?: string
+  ): string {
+    const transactionType = transaction.type?.toLowerCase();
+    const fromAccount = transaction.from_account;
+    const toAccount = transaction.to_account;
+    const initialAmount = this.toOptionalNumber(transaction.initial_amount ?? transaction.amount);
+    const finalAmount = this.toOptionalNumber(transaction.final_amount);
+    const isExchangeTransaction = this.isExchangeTransaction(transaction);
+    const isTransferTransaction =
+      transactionType === 'transfer' ||
+      (!!fromAccount || !!toAccount);
+    const hasExchangeAccounts = !!fromAccount && !!toAccount;
+    const hasExchangeMarker =
+      (transaction.purpose ?? '').toLowerCase().includes('kurs') ||
+      (transaction.description ?? transaction.desc ?? '').toLowerCase().includes('menjačnica');
+    const hasDifferentSettlementAmounts =
+      initialAmount !== undefined &&
+      finalAmount !== undefined &&
+      !this.areCloseEnough(initialAmount, finalAmount);
+    const recipientName = transaction.recipientName ?? transaction.recipient_name;
+    const hasPaymentMarker =
+      transactionType === 'payment' ||
+      !!transaction.paymentCode ||
+      !!transaction.payment_code ||
+      !!recipientName;
 
-    if (normalizedType === 'devizni' || normalizedType === 'foreign_currency' || normalizedType === 'foreign') {
+    if (hasPaymentMarker && !isExchangeTransaction && !hasDifferentSettlementAmounts && !hasExchangeMarker) {
+      const directPaymentDescription = transaction.description ?? transaction.desc ?? transaction.purpose ?? '';
+      if (directPaymentDescription && directPaymentDescription.trim()) {
+        return directPaymentDescription;
+      }
+
+      if (recipientName) {
+        return recipientName;
+      }
+
+      return 'Plaćanje';
+    }
+
+    if ((isExchangeTransaction || hasDifferentSettlementAmounts) && hasExchangeAccounts) {
+      if (accountNumber && fromAccount === accountNumber) {
+        return 'Menjačnica - odlazna konverzija';
+      }
+
+      if (accountNumber && toAccount === accountNumber) {
+        return 'Menjačnica - dolazna konverzija';
+      }
+
+      return 'Menjačnica';
+    }
+
+    if (transactionType === 'payment' || !!transaction.paymentCode || !!transaction.payment_code) {
+      const directPaymentDescription = transaction.description ?? transaction.desc ?? transaction.purpose ?? '';
+      if (directPaymentDescription && directPaymentDescription.trim()) {
+        return directPaymentDescription;
+      }
+
+      if (recipientName) {
+        return recipientName;
+      }
+
+      return 'Plaćanje';
+    }
+
+    if ((hasExchangeMarker || transactionType === 'exchange' || transactionType === 'conversion') && hasExchangeAccounts) {
+      if (accountNumber && fromAccount === accountNumber) {
+        return 'Menjačnica - odlazna konverzija';
+      }
+
+      if (accountNumber && toAccount === accountNumber) {
+        return 'Menjačnica - dolazna konverzija';
+      }
+
+      return 'Menjačnica';
+    }
+
+    if (isTransferTransaction) {
+      if (accountNumber && fromAccount === accountNumber) {
+        return 'Prenos - odlazni';
+      }
+
+      if (accountNumber && toAccount === accountNumber) {
+        return 'Prenos - dolazni';
+      }
+
+      return 'Prenos';
+    }
+
+    const directDescription = transaction.description ?? transaction.desc ?? transaction.purpose ?? '';
+    return directDescription && directDescription.trim()
+      ? directDescription
+      : (transaction.recipientName ?? transaction.recipient_name ?? 'Transakcija');
+  }
+
+  private resolveTransactionId(transaction: TransactionApiResponse): number {
+    const explicitId = this.toOptionalNumber(transaction.id);
+    if (explicitId !== undefined) {
+      return explicitId;
+    }
+
+    const timestamp = transaction.date ?? transaction.timestamp ?? '';
+    const amount = this.toOptionalNumber(transaction.amount ?? transaction.initial_amount ?? transaction.final_amount) ?? 0;
+    const fingerprint = `${transaction.from_account ?? ''}-${transaction.to_account ?? ''}-${timestamp}-${amount}`;
+
+    let hash = 0;
+    for (let index = 0; index < fingerprint.length; index += 1) {
+      hash = ((hash << 5) - hash + fingerprint.charCodeAt(index)) | 0;
+    }
+
+    return Math.abs(hash);
+  }
+
+  private mapAccountType(type: string | undefined): Account['type'] {
+    if (type === 'devizni' || type === 'foreign') {
       return 'devizni';
     }
 
-    if (normalizedType === 'stedni' || normalizedType === 'savings') {
+    if (type === 'stedni' || type === 'savings') {
       return 'stedni';
     }
 
-    if (normalizedType === 'poslovni' || normalizedType === 'business') {
+    if (type === 'poslovni' || type === 'business') {
       return 'poslovni';
     }
+
+    return 'tekuci';
   }
 
-  private unwrapAccountsResponse(response: AccountListApiResponse): AccountApiResponse[] {
-    if (Array.isArray(response)) {
-      return response;
+  private resolveAccountId(account: AccountApiResponse, accountNumber: string): number {
+    const explicitId = this.toNumber(account.id ?? account.accountId ?? account.account_id);
+    if (explicitId > 0) {
+      return explicitId;
     }
 
-    return response.value ?? response.data ?? [];
-  }
-
-  private getUniqueAccounts(accounts: Account[]): Account[] {
-    const uniqueAccounts = new Map<string, Account>();
-
-    for (const account of accounts) {
-      const signature = [
-        account.accountNumber || 'no-account-number',
-        account.currency || 'no-currency',
-        account.name || 'no-name',
-        account.id || 0,
-      ].join('|');
-
-      if (!uniqueAccounts.has(signature)) {
-        uniqueAccounts.set(signature, account);
-      }
-    }
-
-    return Array.from(uniqueAccounts.values());
-  }
-
-  private getFallbackAccountId(accountNumber: string): number {
     const digits = accountNumber.replace(/\D/g, '');
     if (!digits) {
       return 0;
     }
 
-    return this.toNumber(digits.slice(-9));
+    const tail = digits.slice(-9);
+    const parsed = Number.parseInt(tail, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private toNumber(value: number | string | undefined): number {
     const parsed = typeof value === 'string' ? parseFloat(value) : value;
     return Number.isFinite(parsed) ? parsed as number : 0;
+  }
+
+  private toOptionalNumber(value: number | string | undefined): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const parsed = typeof value === 'string' ? parseFloat(value) : value;
+    return Number.isFinite(parsed) ? (parsed as number) : undefined;
+  }
+
+  private isExchangeTransaction(transaction: TransactionApiResponse): boolean {
+    const startCurrencyId = this.toOptionalNumber(transaction.start_currency_id);
+    const exchangeRate = this.toOptionalNumber(transaction.exchange_rate);
+
+    if ((startCurrencyId ?? 0) > 0) {
+      return true;
+    }
+
+    if ((exchangeRate ?? 0) > 0) {
+      return true;
+    }
+
+    const marker = `${transaction.description ?? transaction.desc ?? ''} ${transaction.purpose ?? ''}`.toLowerCase();
+    return marker.includes('menjačnica') || marker.includes('kurs') || marker.includes('konverz');
+  }
+
+  private areCloseEnough(left: number, right: number): boolean {
+    return Math.abs(left - right) < 0.0001;
   }
 
   private shouldUseMockFallback(error: unknown): boolean {

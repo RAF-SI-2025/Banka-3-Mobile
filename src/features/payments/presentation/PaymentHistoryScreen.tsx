@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { fmt } from '../../../shared/utils/formatters';
+import { fmt, fmtDateTime } from '../../../shared/utils/formatters';
 
 interface Props { onBack: () => void; }
 
@@ -12,7 +12,7 @@ const MOCK_PAYMENTS = [
   { id: 3, recipient: 'Ana Jovanović', account: '265-000...887-11', amount: -15000, currency: 'RSD', date: '28.02.2025 10:20', status: 'completed' as const, purpose: 'Pozajmica', code: '289' },
   { id: 4, recipient: 'Vodovod Beograd', account: '908-000...654-32', amount: -1250, currency: 'RSD', date: '25.02.2025 11:05', status: 'pending' as const, purpose: 'Komunalne usluge', code: '240' },
   { id: 5, recipient: 'Informatika AD', account: '325-000...112-45', amount: -15420, currency: 'RSD', date: '20.02.2025 09:00', status: 'completed' as const, purpose: 'Rata kredita', code: '289' },
-  { id: 6, recipient: 'Prenos - devizni', account: '265-000...234-78', amount: -58750, currency: 'RSD', date: '18.02.2025 16:30', status: 'completed' as const, purpose: 'Konverzija u EUR', code: '289' },
+  { id: 6, recipient: 'Menjačnica - odlazna konverzija', account: '265-000...234-78', amount: -58750, currency: 'RSD', date: '18.02.2025 16:30', status: 'completed' as const, purpose: 'Konverzija u EUR', code: '289' },
   { id: 7, recipient: 'SBB Beograd', account: '150-000...789-12', amount: -3500, currency: 'RSD', date: '15.02.2025 12:15', status: 'completed' as const, purpose: 'Internet i TV', code: '241' },
   { id: 8, recipient: 'Parking servis', account: '160-000...321-99', amount: -800, currency: 'RSD', date: '12.02.2025 08:40', status: 'rejected' as const, purpose: 'Mesečna karta', code: '289' },
 ];
@@ -68,7 +68,7 @@ export default function PaymentHistoryScreen({ onBack }: Props) {
             ['Račun primaoca', selected.account],
             ['Svrha plaćanja', selected.purpose],
             ['Šifra plaćanja', selected.code],
-            ['Datum i vreme', selected.date],
+            ['Datum i vreme', fmtDateTime(selected.date)],
             ['Status', sCfg.label],
           ].map(([l, v], i) => (
             <View key={l} style={[styles.dRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
@@ -127,7 +127,7 @@ export default function PaymentHistoryScreen({ onBack }: Props) {
             </View>
             <View style={styles.flex1}>
               <Text style={styles.payRecipient} numberOfLines={1}>{p.recipient}</Text>
-              <Text style={styles.payDate}>{p.date}</Text>
+              <Text style={styles.payDate}>{fmtDateTime(p.date)}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.payAmount}>{fmt(p.amount, p.currency)}</Text>
