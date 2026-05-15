@@ -1,0 +1,119 @@
+# Banka-3-Mobile
+
+Expo / React Native client for Banka 3. **Client-only** (spec p.84
+"namenjena samo Klijentima"). Ground-up rewrite on the orphan `rewrite`
+branch — old `main` is dead, same as the backend/frontend repos.
+
+The top-level `/home/user/si/CLAUDE.md` is the architecture overview;
+this file is the mobile-specific working memory.
+
+## Scope (spec p.84)
+
+The spec section is one page and listed under *Dodatni poeni*. Mandatory
+core is **verification** (the 2FA companion for web actions, gating
+spec p.11). Chosen optional extra: **view-only** account balance + tx
+history. Initiating payments from the phone is explicitly out of scope.
+
+## Stack (locked)
+
+- **Expo SDK 55** / React 19 / RN 0.83, **Expo Router** (file-based,
+  mirrors the web app's TanStack Router model)
+- **NativeWind 4** + **tailwindcss 3.4** (NativeWind 4 requires TW 3.4,
+  not 4) — `global.css` is the Tailwind entry, compiled by Metro
+- **TanStack Query 5** — server state
+- **Zustand 5** — auth/session store (readable by the non-React axios
+  interceptor via `getState()`, exactly like the web app)
+- **React Hook Form 7 + Zod 4** — forms
+- **Axios** — transport; hand-written wrappers over **types-only**
+  OpenAPI codegen (same convention as the web app)
+- **expo-secure-store** (refresh token), **expo-crypto** (Idempotency
+  UUID)
+
+## Layout
+
+```
+app/                       # Expo Router file routes
+├── _layout.tsx            # providers (Query, SafeArea, Gesture) + bootstrap
+├── index.tsx              # auth-status redirect (splash while loading)
+├── login.tsx              # email + lozinka (RHF + Zod)
+└── (app)/                 # authed group — Tabs == spec p.84 "Meni"
+    ├── _layout.tsx        # auth gate + Tabs
+    ├── index.tsx          # Početna (identity, logout)
+    ├── verifikacija.tsx   # MANDATORY core — poll-first code viewer
+    └── racuni/            # view-only accounts (Stack)
+        ├── index.tsx      # list (sorted by raspoloživo desc, spec p.19)
+        └── [id].tsx       # balance + tx history
+src/
+├── lib/
+│   ├── api/               # client.ts (axios+refresh), auth/accounts/
+│   │   │                  #   verification wrappers, error.ts
+│   │   └── generated/     # OpenAPI types (checked in, types-only)
+│   ├── auth/              # store (Zustand), storage (secure-store),
+│   │                      #   session (login/bootstrap/signOut)
+│   ├── query-keys.ts      # key factory
+│   └── format.ts          # Serbian money/date formatting
+└── components/ui.tsx      # shared primitives (NativeWind)
+```
+
+## Auth — the key divergence from web
+
+Web keeps the refresh token in an httpOnly cookie. RN has no cookie
+jar, so mobile holds a **long-lived refresh token in the OS secure
+store** and sends it in the refresh body. The backend **already
+supports this** — `v1LoginResponse.refreshToken` /
+`v1RefreshRequest{refreshToken}` exist (the web app just opts for the
+cookie path). So the only P0 backend work is:
+
+1. A **long-lived / non-expiring refresh-token lifetime** for mobile
+   logins (honors spec p.84 "no session interval"). Not done yet.
+2. `GET /api/v1/verification/pending` — additive endpoint the
+   verification screen polls. Not done yet (screen renders the empty
+   state until it lands).
+
+Cold start: `bootstrapSession()` → no stored token → `/login`; else
+hit `/auth/me`, the 401 interceptor silently refreshes (rotating the
+stored token), identity is filled from the response.
+
+## Conventions
+
+- **TypeScript strict** (+ `noUncheckedIndexedAccess`). No `any`
+  outside `src/lib/api/generated/`. Axios errors go through
+  `apiError(err, fallback)`.
+- **Verification endpoints are hand-typed.** They live in gateway
+  handlers OUTSIDE the proto/grpc-gateway surface, so they never
+  appear in `banka.swagger.json` — same as the web app's
+  `verification.ts`.
+- **Spec Option 1**: the phone displays the 6-digit code; the user
+  types it back on the web app. Poll-first (`refetchInterval`), no
+  push infra — Expo Push is a possible later upgrade.
+- **Strings are Serbian**, written inline at call sites.
+- **Money/dates** via `src/lib/format.ts`: `180.000,00 RSD` (amount
+  then currency), dates `DD.MM.YYYY`.
+- **Idempotency-Key** (UUID) on every mutating request — axios request
+  interceptor, like the web app.
+- `legacy-peer-deps=true` in `.npmrc` is required (Expo devtools'
+  react-dom peer graph). Don't remove it.
+
+## Commands
+
+```
+npm run api:gen     # regen src/lib/api/generated from
+                    #   ../Banka-3-Backend/gen/openapi/banka.swagger.json
+                    #   (run `make proto` in the backend first)
+npm run typecheck   # tsc --noEmit
+npm run doctor      # expo-doctor
+npm start           # expo start (needs a device/emulator/Expo Go)
+npm run web         # expo start --web (quick preview, no device)
+```
+
+`.env` (copy from `.env.example`) sets `EXPO_PUBLIC_API_BASE_URL` —
+the gateway REST base. On a device this MUST be the dev machine LAN IP
+(not localhost); Android emulator can use `http://10.0.2.2:8080/api`.
+
+## Status (2026-05-15)
+
+Scaffold complete on `rewrite`: tooling + auth/session + verification
++ accounts skeleton. `tsc` clean, `expo-doctor` 18/18, Metro bundles.
+Next: P0 backend (long-lived mobile refresh lifetime +
+`GET /verification/pending`), then wire the verification screen to
+real data and flesh out the account views.
