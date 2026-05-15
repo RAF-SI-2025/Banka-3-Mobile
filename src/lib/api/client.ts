@@ -89,7 +89,10 @@ async function refresh(): Promise<string | null> {
       }
       const { data } = await axios.post<v1RefreshResponse>(
         `${API_BASE}/v1/auth/refresh`,
-        { refreshToken: stored },
+        // longLivedSession keeps the rotated token long-lived (spec
+        // p.84). The gateway reads the body token when there's no
+        // cookie (the mobile path).
+        { refreshToken: stored, longLivedSession: true },
         { headers: { "Content-Type": "application/json" } },
       );
       if (!data.accessToken) {
