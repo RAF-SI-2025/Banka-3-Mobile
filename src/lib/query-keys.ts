@@ -15,5 +15,7 @@ export const keys = {
     // Poll-first verification viewer (spec p.84 / spec p.11). The
     // GET /verification/pending endpoint is the P0 backend addition.
     pending: () => ["verification", "pending"] as const,
+    // Durable request history (spec p.84 "Stranica Verifikacija").
+    history: () => ["verification", "history"] as const,
   },
 } as const;

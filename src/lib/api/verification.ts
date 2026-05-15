@@ -41,3 +41,17 @@ export async function getPendingVerifications(): Promise<
   );
   return data.pending ?? [];
 }
+
+// GET /api/v1/verification/history — durable request history (spec
+// p.84 "Stranica Verifikacija": every request submitted in the
+// client's name, marked successful/unsuccessful). Survives the Redis
+// code TTL (backed by the user service); status is the gateway's
+// projected value (a stale-pending row reads back as "expired").
+export async function getVerificationHistory(): Promise<
+  VerificationHistoryItem[]
+> {
+  const { data } = await api.get<{ history?: VerificationHistoryItem[] }>(
+    "/v1/verification/history",
+  );
+  return data.history ?? [];
+}

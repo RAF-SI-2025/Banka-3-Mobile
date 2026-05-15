@@ -1,4 +1,4 @@
-import { FlatList, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -64,6 +64,15 @@ export default function AccountDetailScreen() {
         <FlatList
           data={transactions}
           keyExtractor={(t, i) => t.id ?? String(i)}
+          refreshControl={
+            <RefreshControl
+              refreshing={account.isRefetching || tx.isRefetching}
+              onRefresh={() => {
+                void account.refetch();
+                void tx.refetch();
+              }}
+            />
+          }
           renderItem={({ item }) => {
             const outgoing = item.fromAccountId === accountId;
             const amount = outgoing ? item.fromAmount : item.toAmount;

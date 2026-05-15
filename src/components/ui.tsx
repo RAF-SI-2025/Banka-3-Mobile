@@ -84,3 +84,28 @@ export function MessageState({ message }: { message: string }) {
     </Centered>
   );
 }
+
+export type BadgeTone = "success" | "danger" | "warning" | "info" | "neutral";
+
+const badgeTones: Record<BadgeTone, string> = {
+  success: "bg-emerald-100 text-emerald-700",
+  danger: "bg-red-100 text-red-700",
+  warning: "bg-amber-100 text-amber-700",
+  info: "bg-sky-100 text-sky-700",
+  neutral: "bg-slate-100 text-slate-600",
+};
+
+export function Badge({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: BadgeTone;
+}) {
+  const cls = badgeTones[tone];
+  return (
+    <View className={`self-start rounded-full px-2.5 py-1 ${cls}`}>
+      <Text className={`text-xs font-semibold ${cls}`}>{label}</Text>
+    </View>
+  );
+}

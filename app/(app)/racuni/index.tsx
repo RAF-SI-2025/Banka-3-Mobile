@@ -1,4 +1,4 @@
-import { FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { Link } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -13,7 +13,7 @@ import { Card, LoadingState, MessageState, Screen } from "@/components/ui";
 export default function RacuniScreen() {
   const userId = useAuthStore((s) => s.identity?.userId ?? "");
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isRefetching, refetch } = useQuery({
     queryKey: keys.accounts.list(),
     queryFn: () => listAccounts(userId),
     enabled: !!userId,
@@ -38,7 +38,13 @@ export default function RacuniScreen() {
       ) : (
         <FlatList
           data={accounts}
-          keyExtractor={(a) => a.id ?? a.number ?? Math.random().toString()}
+          keyExtractor={(a, i) => a.id ?? a.number ?? String(i)}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+            />
+          }
           renderItem={({ item }) => (
             <Link href={`/(app)/racuni/${item.id}`} asChild>
               <Pressable>

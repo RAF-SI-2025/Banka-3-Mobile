@@ -32,6 +32,12 @@ export default function HomeScreen() {
         <Text className="text-lg font-semibold text-slate-900">
           {fullName || "—"}
         </Text>
+        {/* Spec p.84 Početna — osnovni podaci: ime i prezime + email
+            (klijent nema poseban username). */}
+        <Text className="text-slate-500 text-sm mt-2">Email</Text>
+        <Text className="text-base text-slate-900">
+          {identity?.email || "—"}
+        </Text>
       </Card>
 
       <Card>

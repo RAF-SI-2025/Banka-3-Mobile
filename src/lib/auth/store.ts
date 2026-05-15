@@ -15,6 +15,10 @@ export interface AuthIdentity {
   permissions: string[];
   firstName: string;
   lastName: string;
+  /** Spec p.84 Početna shows the client's email; clients have no
+   *  separate username. Empty until /auth/me fills it (the login
+   *  response body carries no email field). */
+  email: string;
 }
 
 interface AuthState {

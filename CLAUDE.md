@@ -62,13 +62,14 @@ jar, so mobile holds a **long-lived refresh token in the OS secure
 store** and sends it in the refresh body. The backend **already
 supports this** — `v1LoginResponse.refreshToken` /
 `v1RefreshRequest{refreshToken}` exist (the web app just opts for the
-cookie path). So the only P0 backend work is:
+cookie path). The backend P0 work is **DONE** (2026-05-15):
 
-1. A **long-lived / non-expiring refresh-token lifetime** for mobile
-   logins (honors spec p.84 "no session interval"). Not done yet.
-2. `GET /api/v1/verification/pending` — additive endpoint the
-   verification screen polls. Not done yet (screen renders the empty
-   state until it lands).
+1. Long-lived refresh-token lifetime for mobile logins
+   (`longLivedSession:true` → `JWT_MOBILE_REFRESH_TTL` ~1y, token
+   in the response body, not a cookie).
+2. `GET /api/v1/verification/pending` (active codes) **and**
+   `GET /api/v1/verification/history` (durable request history,
+   spec p.84) — both live and wired into the Verifikacija screen.
 
 Cold start: `bootstrapSession()` → no stored token → `/login`; else
 hit `/auth/me`, the 401 interceptor silently refreshes (rotating the
@@ -112,8 +113,33 @@ the gateway REST base. On a device this MUST be the dev machine LAN IP
 
 ## Status (2026-05-15)
 
-Scaffold complete on `rewrite`: tooling + auth/session + verification
-+ accounts skeleton. `tsc` clean, `expo-doctor` 18/18, Metro bundles.
-Next: P0 backend (long-lived mobile refresh lifetime +
-`GET /verification/pending`), then wire the verification screen to
-real data and flesh out the account views.
+P0 backend DONE (long-lived mobile refresh, body refresh token,
+`GET /verification/pending`). **Verification core complete + spec
+p.84 conformant**: the Verifikacija screen shows active codes (live
+mm:ss countdown) AND the durable request history marked
+successful/unsuccessful — the spec mandates the history, not just
+live codes. Backed by a new `"user".verification_events` table +
+internal user RPCs + a gateway `RecordingVerifier` decorator +
+`GET /api/v1/verification/history` (stale-pending → "expired"
+projected gateway-side). Početna now shows email (spec p.84
+"username/email"); `AuthIdentity.email` filled from `/auth/me`
+(login response has none). Device-readiness polish landed:
+pull-to-refresh on all list screens, AppState→`focusManager` +
+`refetchOnWindowFocus:true` (RN needs the bridge or focus refetch
+is dead). `tsc` clean.
+
+**Device E2E (2026-05-15):** validated on a headless Android
+emulator (Expo Go, SDK 55, live backend) via Maestro — see
+`.maestro/README.md` + `npm run e2e`. The on-device run caught and
+fixed a **critical login bug**: `loginWithCredentials` compared the
+gateway's lowercase wire `userKind` ("client") to the generated
+proto enum (`USER_KIND_CLIENT`) and rejected *every* login. The
+auth endpoints are hand-written in the gateway and bypass swagger —
+trust the handler's wire contract, not the codegen, for `/auth/*`.
+Final smoke: 26/0 (login → Početna email → Verifikacija live
+code+countdown+history → Računi graceful-degrade).
+
+NOT committed/pushed yet. Next: commit when asked; live-exercise
+view-only accounts with the bank service up (their endpoints are
+byte-identical to the proven web client but weren't live-tested in
+the minimal validation stack).
