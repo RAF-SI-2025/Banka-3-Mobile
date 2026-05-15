@@ -1,0 +1,59 @@
+# End-to-end smoke against a LIVE backend, run in Expo Go on a headless
+# emulator. Proves the spec p.84 mobile core works on a real Android
+# runtime (not just RN-web):
+#   - mobile long-lived login through the gateway
+#   - Početna shows the client's email (spec p.84 "username/email")
+#   - Verifikacija screen renders the durable request history AND, when
+#     scripts/e2e.sh has issued a fresh code, the live pending code
+#     with its countdown (spec Option 1)
+#   - Računi degrades gracefully when the bank service is absent
+#
+# Preconditions (handled by scripts/e2e.sh): backend up, adb reverse
+# 8080→gateway, and one fresh verification code issued for the seeded
+# klijent so the "Aktivni zahtevi" section is populated.
+#
+# Data-dependent assertions use extendedWaitUntil because the screens
+# fetch on mount (TanStack Query) — the elements appear a beat after
+# navigation.
+appId: host.exp.exponent
+---
+- runFlow: login.yaml
+
+# --- Početna (spec p.84): ime i prezime + email ---
+- extendedWaitUntil:
+    visible: "Dobrodošli"
+    timeout: 20000
+- assertVisible: "Klijent"
+- extendedWaitUntil:
+    visible: "klijent@banka.local"
+    timeout: 15000
+
+# --- Verifikacija (spec p.84 mandatory core) ---
+- tapOn: "Verifikacija"
+- extendedWaitUntil:
+    visible: "Istorija zahteva"
+    timeout: 15000
+- assertVisible: "Verifikacija"
+# Fresh code issued by the runner → active-codes section + live
+# countdown + the Serbian action label for limit_change.
+- extendedWaitUntil:
+    visible: "Aktivni zahtevi"
+    timeout: 15000
+- assertVisible:
+    text: "Ističe za.*"
+- assertVisible:
+    text: "Preostalo pokušaja:.*"
+# Durable history row (the just-issued request is recorded as pending,
+# labelled "Promena limita"; older runs add Uspešno/Neuspešno/Isteklo).
+- extendedWaitUntil:
+    visible: "Promena limita"
+    timeout: 15000
+
+# --- Računi: graceful failure when bank service is down ---
+- tapOn: "Računi"
+- extendedWaitUntil:
+    visible:
+      text: "Nije moguće učitati račune.|Nemate računa."
+    timeout: 15000
+
+- takeScreenshot: /tmp/banka-e2e-final

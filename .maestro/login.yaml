@@ -1,0 +1,31 @@
+# Reusable login subflow. Idempotent + re-run safe:
+#  - dismisses the Expo Go dev overlay (first load only)
+#  - only drives the form when the login screen is actually shown
+#    (expo-secure-store persists the session across Expo Go runs)
+#  - selects inputs by their label (robust once the placeholder is
+#    gone) and clears them first, so repeated runs don't accumulate
+#    text into "klijent@banka.localklijent@banka.local".
+appId: host.exp.exponent
+---
+- tapOn:
+    text: "Continue"
+    optional: true
+- tapOn:
+    text: "Close"
+    optional: true
+- runFlow:
+    when:
+      visible: "Prijava na nalog"
+    commands:
+      - tapOn:
+          below: "Email"
+      - eraseText
+      - inputText: "klijent@banka.local"
+      - tapOn:
+          below: "Lozinka"
+      - eraseText
+      - inputText: "Klijent123!"
+      - tapOn: "Prijavi se"
+      - extendedWaitUntil:
+          visible: "Dobrodošli"
+          timeout: 25000
