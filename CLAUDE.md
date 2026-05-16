@@ -105,11 +105,43 @@ npm run typecheck   # tsc --noEmit
 npm run doctor      # expo-doctor
 npm start           # expo start (needs a device/emulator/Expo Go)
 npm run web         # expo start --web (quick preview, no device)
+npm run build:android  # local APK for a real device (see below)
 ```
 
 `.env` (copy from `.env.example`) sets `EXPO_PUBLIC_API_BASE_URL` —
-the gateway REST base. On a device this MUST be the dev machine LAN IP
-(not localhost); Android emulator can use `http://10.0.2.2:8080/api`.
+the gateway REST base. It is **baked into the JS bundle at build
+time**, not read at runtime. For dev/emulator use `localhost`
+(`adb reverse`) or `http://10.0.2.2:8080/api`; for a real-device
+build it MUST be a LAN-reachable / deployed gateway (the build
+script refuses a loopback base unless `ALLOW_LOCALHOST=1`).
+
+## Device build (Android only)
+
+iOS is **out of scope** — it needs macOS + Xcode + an Apple
+Developer account, none of which exist here. Android only.
+
+This is a managed / Continuous-Native-Generation app: there is no
+tracked `android/` (or `ios/`) project. `npm run build:android`
+(`scripts/build-android.sh`) runs `expo prebuild` to generate the
+native project from `app.json` (identifiers are already set:
+`rs.raf.banka3.mobile`), provisions exactly the SDK packages the
+generated project needs, and runs Gradle. The generated `android/`
+is gitignored — ephemeral build output, never hand-edit or commit.
+
+- **No Expo cloud / EAS / account** — deliberate, matches the
+  project's Docker-only, no-external-services stance. (`expo prebuild`
+  also rewrites the `android`/`ios` package.json scripts to
+  `expo run:*`; those are intentionally kept as `expo start --*`
+  for the Expo Go dev/E2E workflow — revert them if prebuild flips
+  them again.)
+- **Debug is the default** (`VARIANT=debug`, no keystore) — fine for
+  sideloading via `adb install -r`. `VARIANT=release` needs a signing
+  config + keystore (keystores are gitignored; never commit one).
+- **The API-base gotcha is the one that bites**: it is embedded at
+  build time, so a `localhost` build is dead on a real phone. Pass
+  `EXPO_PUBLIC_API_BASE_URL=http://<lan-or-deployed>:8080/api`.
+- Toolchain (JDK 17 + Android SDK) is discovered the same way as
+  `scripts/e2e.sh` (`~/android-tools`, `~/Android/Sdk`).
 
 ## Status (2026-05-16)
 

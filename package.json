@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "api:gen": "openapi --input ../Banka-3-Backend/gen/openapi/banka.swagger.json --output src/lib/api/generated --client axios --useOptions --exportServices false --exportCore false",
     "doctor": "expo-doctor",
-    "e2e": "bash scripts/e2e.sh"
+    "e2e": "bash scripts/e2e.sh",
+    "build:android": "bash scripts/build-android.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
