@@ -111,7 +111,7 @@ npm run web         # expo start --web (quick preview, no device)
 the gateway REST base. On a device this MUST be the dev machine LAN IP
 (not localhost); Android emulator can use `http://10.0.2.2:8080/api`.
 
-## Status (2026-05-15)
+## Status (2026-05-16)
 
 P0 backend DONE (long-lived mobile refresh, body refresh token,
 `GET /verification/pending`). **Verification core complete + spec
@@ -139,7 +139,19 @@ trust the handler's wire contract, not the codegen, for `/auth/*`.
 Final smoke: 26/0 (login → Početna email → Verifikacija live
 code+countdown+history → Računi graceful-degrade).
 
-NOT committed/pushed yet. Next: commit when asked; live-exercise
-view-only accounts with the bank service up (their endpoints are
-byte-identical to the proven web client but weren't live-tested in
-the minimal validation stack).
+**All committed and pushed** to `origin/rewrite` (the prior "NOT
+committed/pushed" note is stale — git is the source of truth).
+
+**View-only accounts live-validated 2026-05-16** against the full
+containerized stack with the bank service up — the last un-validated
+path. The Maestro suite is now split so neither flow is fragile to
+stack composition: `smoke.yaml` is the bank-independent spec p.84
+core (it no longer touches Računi), and `accounts.yaml` asserts the
+**positive** Računi render (real seeded accounts → detail with
+balance + transaction section). `scripts/e2e.sh` runs both and
+fails fast (`GET /v1/accounts`) if bank is down. So the chosen spec
+p.84 scope is code-complete, pushed, and fully live-validated.
+
+Push notifications were evaluated and **dropped** (2026-05-16):
+remote push needs an SDK 53+ dev build + FCM, regressing the
+deliberate Expo-Go / Docker-only sim property for a non-spec bonus.

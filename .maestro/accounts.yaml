@@ -1,0 +1,34 @@
+# View-only accounts POSITIVE path (spec p.84 "Dodatno"), run in Expo Go
+# on a headless emulator against a LIVE backend WITH the bank service up.
+#
+# smoke.yaml only asserts Računi's graceful-degrade state (bank absent),
+# which stays green even if the real path is broken. This flow proves the
+# unvalidated path: the seeded klijent's real accounts render, and the
+# detail screen shows the balance card + transaction section.
+#
+# Preconditions: backend up INCLUDING bank, adb reverse 8080→gateway,
+# Expo Go loaded. Seeded klijent has accounts incl. "Tekući RSD" (RSD)
+# and "Trgovinski USD" (USD) — see scripts/db seed.
+appId: host.exp.exponent
+---
+- runFlow: login.yaml
+
+# --- Računi list: real accounts, NOT the degrade state ---
+- tapOn: "Računi"
+- extendedWaitUntil:
+    visible: "Raspoloživo"
+    timeout: 20000
+- assertNotVisible:
+    text: "Nije moguće učitati račune.|Nemate računa."
+- assertVisible: "Tekući RSD"
+- assertVisible: "Trgovinski USD"
+
+# --- Account detail: balance card + transaction section render ---
+- tapOn: "Tekući RSD"
+- extendedWaitUntil:
+    visible: "Transakcije"
+    timeout: 20000
+- assertVisible: "Ukupno stanje:.*"
+- assertNotVisible: "Nije moguće učitati račun."
+
+- takeScreenshot: /tmp/banka-e2e-accounts

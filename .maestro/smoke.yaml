@@ -1,12 +1,17 @@
 # End-to-end smoke against a LIVE backend, run in Expo Go on a headless
-# emulator. Proves the spec p.84 mobile core works on a real Android
+# emulator. Proves the spec p.84 mobile CORE works on a real Android
 # runtime (not just RN-web):
 #   - mobile long-lived login through the gateway
 #   - Početna shows the client's email (spec p.84 "username/email")
 #   - Verifikacija screen renders the durable request history AND, when
 #     scripts/e2e.sh has issued a fresh code, the live pending code
 #     with its countdown (spec Option 1)
-#   - Računi degrades gracefully when the bank service is absent
+#
+# This flow is BANK-INDEPENDENT: it deliberately does not touch Računi,
+# so it stays green whether or not the bank service is in the stack.
+# The view-only accounts path (spec p.84 "Dodatno") is covered by
+# accounts.yaml, which asserts the POSITIVE render and requires bank up.
+# Splitting them means neither flow is fragile to stack composition.
 #
 # Preconditions (handled by scripts/e2e.sh): backend up, adb reverse
 # 8080→gateway, and one fresh verification code issued for the seeded
@@ -49,11 +54,4 @@ appId: host.exp.exponent
     visible: "Promena limita"
     timeout: 15000
 
-# --- Računi: graceful failure when bank service is down ---
-- tapOn: "Računi"
-- extendedWaitUntil:
-    visible:
-      text: "Nije moguće učitati račune.|Nemate računa."
-    timeout: 15000
-
-- takeScreenshot: /tmp/banka-e2e-final
+- takeScreenshot: /tmp/banka-e2e-smoke

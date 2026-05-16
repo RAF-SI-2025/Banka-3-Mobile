@@ -13,8 +13,9 @@ Maestro flows are plain YAML test artifacts.
 | File | Purpose |
 |---|---|
 | `login.yaml` | Reusable, idempotent login subflow (handles the Expo Go dev overlay + an already-restored session). |
-| `smoke.yaml` | Spec p.84 core: long-lived login → Početna email → Verifikacija (live code + countdown + durable history) → Računi graceful-degrade. |
-| `../scripts/e2e.sh` | Runner: gateway sanity → issues one fresh verification code for the seeded klijent → `maestro test smoke.yaml`. |
+| `smoke.yaml` | Spec p.84 **core, bank-independent**: long-lived login → Početna email → Verifikacija (live code + countdown + durable history). Does not touch Računi. |
+| `accounts.yaml` | Spec p.84 "Dodatno" **positive path, requires bank up**: real seeded accounts render in Računi → detail screen shows the balance card + transaction section (not the degrade state). |
+| `../scripts/e2e.sh` | Runner: gateway sanity → issues one fresh verification code → asserts the bank precondition (`GET /v1/accounts`) → `maestro test` of **both** `smoke.yaml` then `accounts.yaml`. |
 
 ## One-time machine setup (all unprivileged, no root)
 
@@ -54,9 +55,7 @@ mkdir -p ~/.maestro-dist && unzip -q /tmp/maestro.zip -d ~/.maestro-dist
 ## Per-run
 
 ```bash
-export JAVA_HOME=$(echo ~/android-tools/jdk-17*)
-export ANDROID_HOME=~/Android/Sdk
-export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
+source ~/android-tools/env.sh        # JAVA_HOME + ANDROID_HOME + PATH
 
 # 1. boot the emulator headless (KVM-accelerated, ~1 min)
 emulator -avd banka -no-window -no-audio -no-boot-anim \
@@ -64,17 +63,18 @@ emulator -avd banka -no-window -no-audio -no-boot-anim \
 adb wait-for-device
 until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 2; done
 
-# 2. backend (host stack — see Banka-3-Backend; tools image is blocked
-#    here so run binaries on the host) then bridge it into the emulator
+# 2. backend: the full stack must be up INCLUDING bank (accounts.yaml
+#    needs it). The canonical stack is the containerized one
+#    (`docker compose up` in Banka-3-Backend). Bridge it in:
 adb reverse tcp:8080 tcp:8080      # in-emulator localhost:8080 → host gateway
-adb reverse tcp:8081 tcp:8081      # Metro
+adb reverse tcp:8090 tcp:8090      # Metro (NOT 8081 — see gotchas)
 
 # 3. load the app in Expo Go (auto-installs the SDK-matched Expo Go)
 cd Banka-3-Mobile
 echo 'EXPO_PUBLIC_API_BASE_URL=http://localhost:8080/api' > .env
-npx expo start --android --port 8081 &
+npx expo start --android --port 8090 &
 
-# 4. run the suite
+# 4. run the suite (smoke.yaml + accounts.yaml)
 MAESTRO=~/.maestro-dist/maestro/bin/maestro npm run e2e
 ```
 
@@ -84,12 +84,17 @@ MAESTRO=~/.maestro-dist/maestro/bin/maestro npm run e2e
   software GL (swiftshader); `adb screencap` is a black frame. Maestro
   drives the **accessibility tree**, not pixels, so flows work fine —
   `takeScreenshot` artifacts will just be black.
-- The user-service health probe defaults to `:8081`, which collides
-  with Metro. Run the user service with `PROBE_PORT=8091` (or similar)
-  when validating with Expo on `:8081`.
+- **Metro must not use `:8081`.** With the containerized backend
+  stack, the user service's published probe port is mapped to host
+  `:8081`, so Metro collides there. Run Expo on `:8090` (per the
+  recipe above) and `adb reverse tcp:8090`. (The old `PROBE_PORT`
+  workaround only applied to a host-binary user service, not the
+  container — the published port mapping is what collides now.)
 - Expo Go persists the secure-store session across runs; `login.yaml`
   is conditional so re-runs that are already authenticated still pass.
-- Bank service is optional for this smoke — `Računi` asserts the
-  graceful "cannot load / no accounts" state, so the suite is green
-  with only postgres+redis+user+gateway up.
+- **The bank service must be up.** `accounts.yaml` asserts the real
+  Računi render; `e2e.sh` fails fast with a clear message (via
+  `GET /v1/accounts`) if bank is absent. `smoke.yaml` itself is
+  bank-independent (it never opens Računi), so a quick core-only
+  check is still `maestro test .maestro/smoke.yaml`.
 - `aosp_atd` has no Google Play; Expo Go needs none.
