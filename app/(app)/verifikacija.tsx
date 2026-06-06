@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import { FlatList, RefreshControl, Text, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  approveVerification,
   getPendingVerifications,
   getVerificationHistory,
+  type PendingVerification,
   type VerificationHistoryItem,
   type VerificationOutcome,
 } from "@/lib/api/verification";
 import { keys } from "@/lib/query-keys";
+import { apiError } from "@/lib/api/error";
 import { formatDateTime } from "@/lib/format";
 import {
   Badge,
   type BadgeTone,
+  Button,
   Card,
   LoadingState,
   MessageState,
@@ -76,6 +80,63 @@ function HistoryRow({ item }: { item: VerificationHistoryItem }) {
   );
 }
 
+// ActiveRequest renders one pending verification with the quick-approve
+// action (todoSpec S12). Tapping "Odobri" marks the request approved on
+// the backend; the web app's poll-mode dialog then auto-proceeds with
+// the gated action — the client never types the code. The fallback
+// (read the code, type it on the web) stays available: the 6-digit code
+// is still shown until approval.
+function ActiveRequest({ item }: { item: PendingVerification }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const approve = useMutation({
+    mutationFn: () => approveVerification(item.id),
+    onSuccess: () => {
+      setError(null);
+      // Refresh so the row reflects approved=true; the web app consuming
+      // it will then drop it from the pending set on a later poll.
+      void qc.invalidateQueries({ queryKey: keys.verification.pending() });
+    },
+    onError: (err) =>
+      setError(apiError(err, "Odobravanje nije uspelo. Pokušajte ponovo.")),
+  });
+
+  const approved = item.approved || approve.isSuccess;
+
+  return (
+    <Card>
+      <Text className="text-slate-500 text-sm">{item.action}</Text>
+      <Text className="text-4xl font-bold tracking-widest text-slate-900 my-2">
+        {item.code}
+      </Text>
+      <View className="flex-row justify-between">
+        <Countdown expiresAt={item.expiresAt} />
+        <Text className="text-slate-500 text-xs">
+          Preostalo pokušaja: {item.attemptsRemaining}
+        </Text>
+      </View>
+      {approved ? (
+        <View className="mt-3">
+          <Badge label="Odobreno" tone="success" />
+          <Text className="text-slate-500 text-xs mt-1">
+            Zahtev je odobren. Nastavite na vebu — kod nije potreban.
+          </Text>
+        </View>
+      ) : (
+        <View className="mt-3">
+          <Button
+            label="Odobri"
+            loading={approve.isPending}
+            onPress={() => approve.mutate()}
+          />
+        </View>
+      )}
+      {error && <Text className="text-red-600 text-xs mt-2">{error}</Text>}
+    </Card>
+  );
+}
+
 export default function VerifikacijaScreen() {
   const pending = useQuery({
     queryKey: keys.verification.pending(),
@@ -129,20 +190,7 @@ export default function VerifikacijaScreen() {
                   Aktivni zahtevi
                 </Text>
                 {activeCodes.map((item) => (
-                  <Card key={item.id}>
-                    <Text className="text-slate-500 text-sm">
-                      {item.action}
-                    </Text>
-                    <Text className="text-4xl font-bold tracking-widest text-slate-900 my-2">
-                      {item.code}
-                    </Text>
-                    <View className="flex-row justify-between">
-                      <Countdown expiresAt={item.expiresAt} />
-                      <Text className="text-slate-500 text-xs">
-                        Preostalo pokušaja: {item.attemptsRemaining}
-                      </Text>
-                    </View>
-                  </Card>
+                  <ActiveRequest key={item.id} item={item} />
                 ))}
               </>
             )}
