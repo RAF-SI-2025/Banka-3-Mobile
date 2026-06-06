@@ -1,217 +1,127 @@
-import { ApiError, NetworkClient } from '../../../core/network/NetworkClient';
+import { NetworkClient } from '../../../core/network/NetworkClient';
+import { storeVerificationSession, VerificationActionKind } from '../../../core/verification/verificationSession';
 import { VerificationRequest } from '../../../shared/types/models';
 import { IVerificationRepository } from '../domain/IVerificationRepository';
 
-interface VerificationApiResponse {
-  id?: number | string;
+const LABEL_TO_ACTION_KIND: Record<string, VerificationActionKind> = {
+  placanje: 'payment',
+  payment: 'payment',
+  'prenos sredstava': 'transfer',
+  prenos: 'transfer',
+  transfer: 'transfer',
+  'promena limita': 'limit_change',
+  'limit change': 'limit_change',
+  'izdavanje kartice': 'card_issue',
+  'card issue': 'card_issue',
+};
+
+interface PendingApiResponse {
+  pending?: PendingVerificationApiItem[];
+}
+
+interface PendingVerificationApiItem {
+  id?: string;
   action?: string;
-  description?: string;
-  amount?: string;
-  recipientName?: string;
-  recipient_name?: string;
-  recipientAccount?: string;
-  recipient_account?: string;
-  sourceAccount?: string;
-  source_account?: string;
-  timestamp?: string;
-  status?: string;
   code?: string;
+  expiresAt?: string;
+  attemptsRemaining?: number;
 }
 
-interface VerificationListApiResponse {
-  items?: VerificationApiResponse[];
-  data?: VerificationApiResponse[];
-  verifications?: VerificationApiResponse[];
-  requests?: VerificationApiResponse[];
+interface HistoryApiResponse {
+  history?: HistoryVerificationApiItem[];
 }
 
-const PENDING_ENDPOINTS = [
-  '/api/verification/pending',
-  '/api/verifications/pending',
-  '/api/transactions/verification/pending',
-  '/api/transactions/pending-verification',
-];
-
-const HISTORY_ENDPOINTS = [
-  '/api/verification/history',
-  '/api/verifications/history',
-  '/api/transactions/verification/history',
-  '/api/transactions/verification-requests',
-];
-
-const CONFIRM_ENDPOINTS = (id: number) => [
-  `/api/verification/${id}/confirm`,
-  `/api/verifications/${id}/confirm`,
-  `/api/transactions/${id}/confirm-verification`,
-  '/api/verification/confirm',
-  '/api/verifications/confirm',
-  '/api/transactions/confirm-verification',
-];
-
-const REJECT_ENDPOINTS = (id: number) => [
-  `/api/verification/${id}/reject`,
-  `/api/verifications/${id}/reject`,
-  `/api/transactions/${id}/reject-verification`,
-  '/api/verification/reject',
-  '/api/verifications/reject',
-  '/api/transactions/reject-verification',
-];
+interface HistoryVerificationApiItem {
+  id?: string;
+  action?: string;
+  status?: string;
+  createdAt?: string;
+}
 
 export class VerificationRepository implements IVerificationRepository {
   constructor(private client: NetworkClient) {}
 
   async getHistory(): Promise<VerificationRequest[]> {
-    const response = await this.tryGet<VerificationApiResponse[] | VerificationListApiResponse>(HISTORY_ENDPOINTS);
-    return this.mapList(response);
+    const response = await this.client.get<HistoryApiResponse>('/v1/verification/history');
+    return (response.history ?? []).map(item => ({
+      id: this.hashString(item.id ?? `${item.action ?? ''}:${item.createdAt ?? ''}`),
+      action: item.action ?? 'Verifikacija',
+      description: item.action ?? 'Verifikacija',
+      timestamp: item.createdAt ?? new Date().toISOString(),
+      status: this.mapHistoryStatus(item.status),
+      code: undefined,
+    }));
   }
 
   async getPending(): Promise<VerificationRequest | null> {
-    const response = await this.tryGet<VerificationApiResponse | null>(PENDING_ENDPOINTS);
-    if (!response) {
+    const response = await this.client.get<PendingApiResponse>('/v1/verification/pending');
+    const item = [...(response.pending ?? [])]
+      .sort((left, right) => Date.parse(right.expiresAt ?? '') - Date.parse(left.expiresAt ?? ''))[0];
+
+    if (!item) {
       return null;
     }
 
-    return this.mapRequest(response);
-  }
-
-  async confirm(id: number): Promise<void> {
-    await this.tryAction(CONFIRM_ENDPOINTS(id), id, 'confirm');
-  }
-
-  async reject(id: number): Promise<void> {
-    await this.tryAction(REJECT_ENDPOINTS(id), id, 'reject');
-  }
-
-  private async tryGet<T>(endpoints: string[]): Promise<T> {
-    let lastError: unknown;
-
-    for (const endpoint of endpoints) {
-      try {
-        return await this.client.get<T>(endpoint);
-      } catch (error) {
-        if (!this.shouldTryNextEndpoint(error)) {
-          throw error;
-        }
-
-        lastError = error;
-      }
+    const actionKind = LABEL_TO_ACTION_KIND[this.normalizeLabel(item.action)];
+    if (item.id && item.code && actionKind) {
+      storeVerificationSession({
+        actionKind,
+        verificationId: item.id,
+        code: item.code,
+        expiresAt: item.expiresAt ?? new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
     }
 
-    throw this.toNotFoundError('verifikacioni endpoint', lastError);
-  }
-
-  private async tryAction(
-    endpoints: string[],
-    id: number,
-    action: 'confirm' | 'reject'
-  ): Promise<void> {
-    let lastError: unknown;
-    const bodies = this.buildActionBodies(id, action);
-
-    for (const endpoint of endpoints) {
-      for (const body of bodies) {
-        try {
-          if (body === undefined) {
-            await this.client.post(endpoint);
-          } else {
-            await this.client.post(endpoint, body);
-          }
-
-          return;
-        } catch (error) {
-          if (!this.shouldTryNextEndpoint(error)) {
-            if (this.shouldTryNextActionBody(error)) {
-              lastError = error;
-              continue;
-            }
-
-            throw error;
-          }
-
-          lastError = error;
-        }
-      }
-    }
-
-    throw this.toNotFoundError('verifikaciona akcija', lastError);
-  }
-
-  private mapList(response: VerificationApiResponse[] | VerificationListApiResponse): VerificationRequest[] {
-    const items = Array.isArray(response)
-      ? response
-      : response.items ?? response.data ?? response.verifications ?? response.requests ?? [];
-
-    return items.map(item => this.mapRequest(item));
-  }
-
-  private mapRequest(item: VerificationApiResponse): VerificationRequest {
     return {
-      id: Number(item.id ?? 0),
-      action: item.action ?? 'Nepoznata transakcija',
-      description: item.description ?? '',
-      amount: item.amount,
-      recipientName: item.recipientName ?? item.recipient_name,
-      recipientAccount: item.recipientAccount ?? item.recipient_account,
-      sourceAccount: item.sourceAccount ?? item.source_account,
-      timestamp: item.timestamp ?? new Date().toISOString(),
-      status: this.normalizeStatus(item.status),
+      id: this.hashString(item.id ?? `${item.action ?? ''}:${item.expiresAt ?? ''}`),
+      action: item.action ?? 'Verifikacija',
+      description: 'Aktivan verifikacioni kod',
+      timestamp: item.expiresAt ?? new Date().toISOString(),
+      status: 'pending',
       code: item.code,
     };
   }
 
-  private buildActionBodies(id: number, action: 'confirm' | 'reject'): Array<Record<string, unknown> | undefined> {
-    return [
-      undefined,
-      { id },
-      { verificationId: id },
-      { verification_id: id },
-      { id, action },
-      { verificationId: id, action },
-      { verification_id: id, action },
-      { id, status: action === 'confirm' ? 'confirmed' : 'rejected' },
-      {
-        id,
-        verificationId: id,
-        verification_id: id,
-        action,
-        status: action === 'confirm' ? 'confirmed' : 'rejected',
-      },
-    ];
+  async confirm(): Promise<void> {
+    throw new Error('Potvrda zahteva direktno iz mobilne aplikacije nije podrzana na ovom backendu.');
   }
 
-  private normalizeStatus(status?: string): VerificationRequest['status'] {
+  async reject(): Promise<void> {
+    throw new Error('Ignorisanje zahteva direktno iz mobilne aplikacije nije podrzano na ovom backendu.');
+  }
+
+  private mapHistoryStatus(status?: string): VerificationRequest['status'] {
     switch ((status ?? '').toLowerCase()) {
+      case 'success':
       case 'confirmed':
-      case 'approved':
-      case 'accepted':
-      case 'done':
         return 'confirmed';
+      case 'failed':
       case 'rejected':
-      case 'denied':
-      case 'declined':
         return 'rejected';
       case 'expired':
-      case 'timeout':
         return 'expired';
       default:
         return 'pending';
     }
   }
 
-  private shouldTryNextEndpoint(error: unknown): boolean {
-    return error instanceof ApiError && (error.statusCode === 0 || error.statusCode === 404);
+  private normalizeLabel(value?: string): string {
+    return (value ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '');
   }
 
-  private shouldTryNextActionBody(error: unknown): boolean {
-    return (
-      error instanceof ApiError &&
-      (error.statusCode === 400 || error.statusCode === 422) &&
-      /invalid request body/i.test(error.message)
-    );
-  }
+  private hashString(value: string): number {
+    if (!value) {
+      return 0;
+    }
 
-  private toNotFoundError(label: string, lastError: unknown): Error {
-    const message = lastError instanceof Error ? lastError.message : 'Nepoznata greška';
-    return new Error(`Backend ne izlaže podržan ${label}. Poslednja greška: ${message}`);
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+      hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+    }
+    return Math.abs(hash);
   }
 }

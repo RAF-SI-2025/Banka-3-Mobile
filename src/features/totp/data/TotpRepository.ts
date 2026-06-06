@@ -1,24 +1,38 @@
 import { NetworkClient } from '../../../core/network/NetworkClient';
+import {
+  storeVerificationSession,
+  VerificationActionKind,
+} from '../../../core/verification/verificationSession';
 import { ITotpRepository, TransactionCodeResult } from '../domain/ITotpRepository';
 
-interface TransactionCodeApiResponse {
+interface VerificationCodeApiResponse {
   code: string;
-  valid_until_unix?: number | string;
-  validUntilUnix?: number | string;
-  max_attempts?: number | string;
-  maxAttempts?: number | string;
+  verificationId?: string;
+  expiresAt?: string;
 }
 
 export class TotpRepository implements ITotpRepository {
   constructor(private client: NetworkClient) {}
 
-  async requestTransactionCode(): Promise<TransactionCodeResult> {
-    const response = await this.client.post<TransactionCodeApiResponse>('/api/totp/transaction-code');
+  async requestTransactionCode(actionKind: VerificationActionKind = 'payment'): Promise<TransactionCodeResult> {
+    const response = await this.client.post<VerificationCodeApiResponse>('/v1/verification/request', {
+      actionKind,
+    });
+
+    const expiresAt = response.expiresAt ?? new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    if (response.verificationId) {
+      storeVerificationSession({
+        actionKind,
+        verificationId: response.verificationId,
+        code: response.code,
+        expiresAt,
+      });
+    }
 
     return {
       code: response.code,
-      validUntilUnix: Number(response.valid_until_unix ?? response.validUntilUnix ?? 0),
-      maxAttempts: Number(response.max_attempts ?? response.maxAttempts ?? 3),
+      validUntilUnix: Math.floor(Date.parse(expiresAt) / 1000),
+      maxAttempts: 3,
     };
   }
 }

@@ -34,7 +34,12 @@ const BACKEND_LOAN_TYPE_LABELS: Record<string, string> = {
 
 const getLoanTypeLabel = (loanType: string) => BACKEND_LOAN_TYPE_LABELS[loanType.toLowerCase()] ?? loanType;
 
-const MATURITIES = ['12', '24', '36', '48', '60', '84', '120', '180', '240'];
+const CASH_LOAN_MATURITIES = ['12', '24', '36', '48', '60', '72', '84'];
+const HOUSING_LOAN_MATURITIES = ['60', '84', '120', '180', '240', '300', '360'];
+
+function getAllowedMaturities(loanType: string): string[] {
+  return loanType === 'stambeni' ? HOUSING_LOAN_MATURITIES : CASH_LOAN_MATURITIES;
+}
 
 type Step = 'list' | 'detail' | 'apply' | 'applyConfirm' | 'applySuccess';
 
@@ -105,6 +110,23 @@ export default function LoansScreen({ onBack }: Props) {
     };
   }, []);
 
+  const allowedMaturities = useMemo(() => getAllowedMaturities(loanType), [loanType]);
+
+  useEffect(() => {
+    if (!allowedMaturities.includes(maturity)) {
+      setMaturity(allowedMaturities[0]);
+    }
+    setSubmissionError(null);
+    setErrors(prev => {
+      if (!prev.maturity) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next.maturity;
+      return next;
+    });
+  }, [allowedMaturities, maturity]);
+
   const selectedLoan = useMemo(
     () => (selectedLoanId ? loans.find(loan => loan.id === selectedLoanId) ?? null : null),
     [loans, selectedLoanId]
@@ -144,6 +166,11 @@ export default function LoansScreen({ onBack }: Props) {
     if (!employmentYears.trim()) e.employment = 'Unesite period zaposlenja';
     if (!phone.trim()) e.phone = 'Unesite broj telefona';
     if (!selectedAccount) e.account = 'Izaberite račun za isplatu';
+    if (!allowedMaturities.includes(maturity)) {
+      e.maturity = loanType === 'stambeni'
+        ? 'Za stambeni kredit dozvoljena je ročnost od 60 do 360 meseci.'
+        : 'Za izabrani tip kredita maksimalna ročnost je 84 meseca.';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -331,6 +358,7 @@ export default function LoansScreen({ onBack }: Props) {
           <Text style={styles.selectMain}>{maturity} meseci</Text>
           <Ionicons name="chevron-down" size={18} color={C.textMuted} />
         </TouchableOpacity>
+        {errors.maturity && <Text style={styles.errText}>{errors.maturity}</Text>}
 
         <Text style={[styles.label, { marginTop: 16 }]}>TIP KAMATNE STOPE</Text>
         <TouchableOpacity style={styles.selectBtn} onPress={() => setShowInterestPicker(true)}>
@@ -363,7 +391,7 @@ export default function LoansScreen({ onBack }: Props) {
         {/* Pickers */}
         <BottomSheet visible={showTypePicker} onClose={() => setShowTypePicker(false)} title="Vrsta kredita">
           {LOAN_TYPES.map(t => (
-            <TouchableOpacity key={t.value} style={styles.sheetItem} onPress={() => { setLoanType(t.value); setShowTypePicker(false); }}>
+            <TouchableOpacity key={t.value} style={styles.sheetItem} onPress={() => { setLoanType(t.value); setSubmissionError(null); setShowTypePicker(false); }}>
               <Text style={[styles.sheetItemText, loanType === t.value && { color: C.primary, fontWeight: '600' }]}>{t.label}</Text>
               {loanType === t.value && <Ionicons name="checkmark" size={18} color={C.primary} />}
             </TouchableOpacity>
@@ -371,8 +399,8 @@ export default function LoansScreen({ onBack }: Props) {
         </BottomSheet>
 
         <BottomSheet visible={showMaturityPicker} onClose={() => setShowMaturityPicker(false)} title="Ročnost">
-          {MATURITIES.map(m => (
-            <TouchableOpacity key={m} style={styles.sheetItem} onPress={() => { setMaturity(m); setShowMaturityPicker(false); }}>
+          {allowedMaturities.map(m => (
+            <TouchableOpacity key={m} style={styles.sheetItem} onPress={() => { setMaturity(m); setSubmissionError(null); setShowMaturityPicker(false); }}>
               <Text style={[styles.sheetItemText, maturity === m && { color: C.primary, fontWeight: '600' }]}>{m} meseci</Text>
               {maturity === m && <Ionicons name="checkmark" size={18} color={C.primary} />}
             </TouchableOpacity>

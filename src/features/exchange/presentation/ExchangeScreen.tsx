@@ -45,8 +45,8 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
   const [showFrom, setShowFrom] = useState(false);
   const [showTo, setShowTo]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingFreshCode, setLoadingFreshCode] = useState(false);
-  const [codeInfo, setCodeInfo] = useState('');
+  const [requestingCode, setRequestingCode] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [completedConversion, setCompletedConversion] = useState<{ convertedAmount: number; rate: number; fee?: number; status?: string; purpose?: string } | null>(null);
   const [totpCode, setTotpCode] = useState('');
 
@@ -64,40 +64,6 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
       setToAcc(null);
     }
   }, [fromAcc, toAcc, supportedCurrencies]);
-
-  useEffect(() => {
-    if (step !== 'confirm' || API_CONFIG.USE_MOCK) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadFreshCode = async () => {
-      setLoadingFreshCode(true);
-      setCodeInfo('');
-      try {
-        const result = await container.totpRepository.requestTransactionCode();
-        if (!cancelled) {
-          setTotpCode(result.code);
-          setCodeInfo('Ucitan je svez verification kod sa backend-a.');
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setCodeInfo(e.message ?? 'Neuspesno osvezavanje verification koda.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingFreshCode(false);
-        }
-      }
-    };
-
-    loadFreshCode();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [step]);
 
   const resolvedFrom = fromAcc ?? rsdAccounts[0] ?? accounts[0] ?? null;
   const resolvedTo   = toAcc   ?? forAccounts[0] ?? accounts.find(a => a.accountNumber !== resolvedFrom?.accountNumber) ?? null;
@@ -195,6 +161,10 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
 
   const handleConfirm = async () => {
     if (!isValid || !resolvedFrom || !resolvedTo) return;
+    if (!API_CONFIG.USE_MOCK && !totpCode.trim()) {
+      alert('Prvo unesite ili preuzmite verifikacioni kod.');
+      return;
+    }
     setSubmitting(true);
     try {
       const previousFromBalance = resolvedFrom.availableBalance;
@@ -207,8 +177,8 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
         fromCurrency: resolvedFrom.currency,
         toCurrency: resolvedTo.currency,
         amount: amountNum,
-        description: `${resolvedFrom.name} ${resolvedFrom.currency} -> ${resolvedTo.currency} ${amountNum}`,
-        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim(),
+        description: `Konverzija ${resolvedFrom.currency} u ${resolvedTo.currency}`,
+        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim() || undefined,
       });
 
       const refreshedAccounts = await container.accountRepository.getAccounts();
@@ -238,6 +208,20 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
       alert(e.message ?? 'Greška pri konverziji');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const requestVerificationCode = async () => {
+    setRequestingCode(true);
+    setVerificationMessage('');
+    try {
+      const result = await container.totpRepository.requestTransactionCode('transfer');
+      setTotpCode(result.code);
+      setVerificationMessage('Novi kod je preuzet i upisan u polje.');
+    } catch (e: any) {
+      setVerificationMessage(e?.message ?? 'Neuspesno preuzimanje verifikacionog koda.');
+    } finally {
+      setRequestingCode(false);
     }
   };
 
@@ -326,23 +310,25 @@ export default function ExchangeScreen({ onBack, onRequireTotpSetup, initialTotp
         </View>
         {!API_CONFIG.USE_MOCK && (
           <>
-            <Text style={styles.label}>TOTP KOD</Text>
+            <Text style={styles.label}>VERIFIKACIONI KOD</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
                 value={totpCode}
                 onChangeText={setTotpCode}
-                placeholder="Unesite 6-cifreni TOTP kod"
+                placeholder="Kod sa stranice Verifikacija"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
                 maxLength={12}
               />
             </View>
             <Text style={styles.helperText}>
-              {loadingFreshCode
-                ? 'Ucitavam svezi verification kod sa backend-a...'
-                : codeInfo || 'Kod sa mobilnog verification ekrana se ovde popunjava automatski kada je dostupan.'}
+              Unesite kod sa stranice Verifikacija ili kliknite na dugme ispod da aplikacija preuzme novi kod za konverziju.
             </Text>
+            {verificationMessage ? <Text style={styles.helperText}>{verificationMessage}</Text> : null}
+            <TouchableOpacity style={styles.secBtn} onPress={requestVerificationCode} disabled={requestingCode}>
+              {requestingCode ? <ActivityIndicator color={C.primary} size="small" /> : <Text style={styles.secBtnText}>Preuzmi kod za konverziju</Text>}
+            </TouchableOpacity>
           </>
         )}
         <View style={{ flexDirection: 'row', gap: 12 }}>

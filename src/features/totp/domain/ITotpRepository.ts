@@ -1,3 +1,5 @@
+import { VerificationActionKind } from '../../../core/verification/verificationSession';
+
 export interface TransactionCodeResult {
   code: string;
   validUntilUnix: number;
@@ -5,5 +7,5 @@ export interface TransactionCodeResult {
 }
 
 export interface ITotpRepository {
-  requestTransactionCode(): Promise<TransactionCodeResult>;
+  requestTransactionCode(actionKind?: VerificationActionKind): Promise<TransactionCodeResult>;
 }

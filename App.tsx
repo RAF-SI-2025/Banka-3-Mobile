@@ -151,6 +151,7 @@ export default function App() {
     switch (screen) {
       case 'home':
         return <HomeScreen
+          user={user}
           hasNotif={false}
           onOpenAccount={(id: number) => { setDetailAccountId(id); navigate('accounts'); }}
           onShowAllAccounts={() => navigate('accounts')}
@@ -176,7 +177,7 @@ export default function App() {
           onTransactionCode={setTransactionCode}
           onOpenTotpSetup={() => navigate('totpSetup')} />;
       case 'profile':
-        return <ProfileScreen onLogout={handleLogout} />;
+        return <ProfileScreen onLogout={handleLogout} user={user} />;
       case 'employeePortal':
         return <EmployeePortalScreen onBack={goBack} isEmployee={isEmployee} />;
       case 'payment':
@@ -220,6 +221,7 @@ export default function App() {
         return <TotpSetupScreen onBack={goBack} onTransactionCode={setTransactionCode} />;
       default:
         return <HomeScreen
+          user={user}
           hasNotif={false}
           onOpenAccount={(id: number) => { setDetailAccountId(id); navigate('accounts'); }}
           onShowAllAccounts={() => navigate('accounts')}

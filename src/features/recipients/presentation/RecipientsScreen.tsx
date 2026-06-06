@@ -1,140 +1,213 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Modal, StyleSheet, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_RECIPIENTS } from '../../../shared/data/mockData';
 import { compareByNameThenAccount } from '../../../shared/utils/recipientOrder';
+import { useRecipients } from '../../../shared/hooks/useFeatures';
+import { PaymentRecipient } from '../../../shared/types/models';
+import { FeatureHeader, ScreenState } from '../../../shared/components/FeaturePrimitives';
 
-interface Props { onBack: () => void; }
-
-type Recipient = { id: number; name: string; account: string };
+interface Props {
+  onBack: () => void;
+}
 
 export default function RecipientsScreen({ onBack }: Props) {
-  const [recipients, setRecipients] = useState<Recipient[]>([...MOCK_RECIPIENTS]);
+  const { state, actions } = useRecipients();
+  const recipients = useMemo(
+    () => [...(state.data ?? [])].sort((a, b) => compareByNameThenAccount(a, b, item => item.name, item => item.accountNumber)),
+    [state.data]
+  );
+
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingRecipient, setEditingRecipient] = useState<PaymentRecipient | null>(null);
   const [formName, setFormName] = useState('');
   const [formAccount, setFormAccount] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showDelete, setShowDelete] = useState<number | null>(null);
+  const [showDelete, setShowDelete] = useState<PaymentRecipient | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const openAdd = () => { setEditingId(null); setFormName(''); setFormAccount(''); setErrors({}); setShowForm(true); };
-  const openEdit = (r: Recipient) => { setEditingId(r.id); setFormName(r.name); setFormAccount(r.account); setErrors({}); setShowForm(true); };
+  const openAdd = () => {
+    setEditingRecipient(null);
+    setFormName('');
+    setFormAccount('');
+    setErrors({});
+    setActionError(null);
+    setShowForm(true);
+  };
+
+  const openEdit = (recipient: PaymentRecipient) => {
+    setEditingRecipient(recipient);
+    setFormName(recipient.name);
+    setFormAccount(recipient.accountNumber);
+    setErrors({});
+    setActionError(null);
+    setShowForm(true);
+  };
 
   const validate = () => {
-    const e: Record<string, string> = {};
-    if (!formName.trim()) e.name = 'Unesite naziv';
-    if (!formAccount.trim()) e.account = 'Unesite broj računa';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSave = () => {
-    if (!validate()) return;
-    if (editingId) {
-      setRecipients(prev => prev.map(r => r.id === editingId ? { ...r, name: formName.trim(), account: formAccount.trim() } : r));
-    } else {
-      const newId = Math.max(...recipients.map(r => r.id), 0) + 1;
-      setRecipients(prev => [...prev, { id: newId, name: formName.trim(), account: formAccount.trim() }]);
+    const nextErrors: Record<string, string> = {};
+    const normalizedAccount = formAccount.replace(/\D/g, '');
+    if (!formName.trim()) {
+      nextErrors.name = 'Unesite naziv primaoca';
     }
-    setShowForm(false);
+    if (!formAccount.trim()) {
+      nextErrors.account = 'Unesite broj racuna';
+    } else if (normalizedAccount.length !== 18) {
+      nextErrors.account = 'Broj racuna mora imati tacno 18 cifara';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  const handleDelete = (id: number) => {
-    setRecipients(prev => prev.filter(r => r.id !== id));
-    setShowDelete(null);
+  const handleSave = async () => {
+    if (!validate()) {
+      return;
+    }
+
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      if (editingRecipient) {
+        await actions.update(editingRecipient.id, formName.trim(), formAccount.trim());
+      } else {
+        await actions.add(formName.trim(), formAccount.trim());
+      }
+      setShowForm(false);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Neuspesno cuvanje primaoca.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const sortedRecipients = [...recipients].sort((a, b) => compareByNameThenAccount(a, b, r => r.name, r => r.account));
+  const handleDelete = async () => {
+    if (!showDelete) {
+      return;
+    }
+
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await actions.remove(showDelete.id);
+      setShowDelete(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Neuspesno brisanje primaoca.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (state.loading && recipients.length === 0) {
+    return <ScreenState title="Primaoci placanja" onBack={onBack} loading />;
+  }
+
+  if (state.error && recipients.length === 0) {
+    return <ScreenState title="Primaoci placanja" onBack={onBack} error={state.error} />;
+  }
 
   return (
-    <ScrollView style={styles.flex1} contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-      <View style={styles.hRow}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}><Ionicons name="chevron-back" size={20} color={C.textSecondary} /></TouchableOpacity>
-        <Text style={styles.title}>Primaoci plaćanja</Text>
-      </View>
+    <ScrollView style={styles.flex1} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <FeatureHeader title="Primaoci placanja" onBack={onBack} />
 
-      {/* Add button */}
       <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.8}>
         <Ionicons name="add-circle-outline" size={20} color="#fff" />
         <Text style={styles.addText}>Dodaj primaoca</Text>
       </TouchableOpacity>
 
-      {/* Recipients list */}
-      {sortedRecipients.length === 0 ? (
+      {state.error ? <Text style={styles.inlineError}>{state.error}</Text> : null}
+
+      {recipients.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="people-outline" size={48} color={C.textMuted} />
-          <Text style={styles.emptyText}>Nemate sačuvane primaoce</Text>
+          <Text style={styles.emptyText}>Nemate sacuvane primaoce.</Text>
         </View>
-      ) : sortedRecipients.map(r => (
-        <View key={r.id} style={styles.recipientRow}>
-          <View style={styles.recipientIcon}><Ionicons name="person" size={18} color={C.primary} /></View>
-          <View style={styles.flex1}>
-            <Text style={styles.recipientName}>{r.name}</Text>
-            <Text style={styles.recipientAcc}>{r.account}</Text>
+      ) : (
+        recipients.map(recipient => (
+          <View key={recipient.id} style={styles.recipientRow}>
+            <View style={styles.recipientIcon}>
+              <Ionicons name="person" size={18} color={C.primary} />
+            </View>
+            <View style={styles.flex1}>
+              <Text style={styles.recipientName}>{recipient.name}</Text>
+              <Text style={styles.recipientAcc}>{recipient.accountNumber}</Text>
+            </View>
+            <View style={styles.recipientActions}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(recipient)}>
+                <Ionicons name="create-outline" size={18} color={C.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setShowDelete(recipient)}>
+                <Ionicons name="trash-outline" size={18} color={C.danger} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.recipientActions}>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(r)}>
-              <Ionicons name="create-outline" size={18} color={C.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => setShowDelete(r.id)}>
-              <Ionicons name="trash-outline" size={18} color={C.danger} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
+        ))
+      )}
 
-      {/* Add/Edit Modal */}
-      <Modal visible={showForm} transparent animationType="slide">
+      <Modal visible={showForm} transparent animationType="slide" onRequestClose={() => setShowForm(false)}>
         <View style={styles.mOverlay}>
           <View style={styles.mSheet}>
             <View style={styles.mHead}>
-              <Text style={styles.mTitle}>{editingId ? 'Izmeni primaoca' : 'Novi primalac'}</Text>
-              <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color={C.textSecondary} /></TouchableOpacity>
+              <Text style={styles.mTitle}>{editingRecipient ? 'Izmeni primaoca' : 'Novi primalac'}</Text>
+              <TouchableOpacity onPress={() => setShowForm(false)} disabled={submitting}>
+                <Ionicons name="close" size={24} color={C.textSecondary} />
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.label}>NAZIV PRIMAOCA</Text>
             <View style={styles.inputWrap}>
-              <TextInput style={styles.input} value={formName} onChangeText={setFormName}
-                placeholder="Ime ili naziv" placeholderTextColor={C.textMuted} />
+              <TextInput
+                style={styles.input}
+                value={formName}
+                onChangeText={setFormName}
+                placeholder="Ime ili naziv"
+                placeholderTextColor={C.textMuted}
+              />
             </View>
-            {errors.name && <Text style={styles.errText}>{errors.name}</Text>}
+            {errors.name ? <Text style={styles.errText}>{errors.name}</Text> : null}
 
-            <Text style={[styles.label, { marginTop: 16 }]}>BROJ RAČUNA</Text>
+            <Text style={[styles.label, { marginTop: 16 }]}>BROJ RACUNA</Text>
             <View style={styles.inputWrap}>
-              <TextInput style={styles.input} value={formAccount} onChangeText={setFormAccount}
-                placeholder="000-0000000000000-00" placeholderTextColor={C.textMuted} keyboardType="numeric" />
+              <TextInput
+                style={styles.input}
+                value={formAccount}
+                onChangeText={setFormAccount}
+                placeholder="333000112345678910"
+                placeholderTextColor={C.textMuted}
+              />
             </View>
-            {errors.account && <Text style={styles.errText}>{errors.account}</Text>}
+            <Text style={styles.accountHint}>Unesite tacno 18 cifara. Crtice i razmaci su dozvoljeni.</Text>
+            {errors.account ? <Text style={styles.errText}>{errors.account}</Text> : null}
+            {actionError ? <Text style={styles.errText}>{actionError}</Text> : null}
 
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-              <TouchableOpacity style={styles.secBtn} onPress={() => setShowForm(false)}>
-                <Text style={styles.secBtnText}>Poništi</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.secBtn} onPress={() => setShowForm(false)} disabled={submitting}>
+                <Text style={styles.secBtnText}>Ponisti</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryBtn, { flex: 1.5 }]} onPress={handleSave}>
-                <Text style={styles.primaryBtnText}>{editingId ? 'Sačuvaj' : 'Dodaj'}</Text>
+              <TouchableOpacity style={[styles.primaryBtn, { flex: 1.5 }]} onPress={handleSave} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{editingRecipient ? 'Sacuvaj' : 'Dodaj'}</Text>}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Delete confirmation */}
-      <Modal visible={showDelete !== null} transparent animationType="fade">
+      <Modal visible={showDelete !== null} transparent animationType="fade" onRequestClose={() => setShowDelete(null)}>
         <View style={styles.deleteOverlay}>
           <View style={styles.deleteCard}>
-            <Ionicons name="trash" size={40} color={C.danger} style={{ alignSelf: 'center', marginBottom: 16 }} />
-            <Text style={styles.deleteTitle}>Obriši primaoca?</Text>
+            <Ionicons name="trash" size={40} color={C.danger} style={styles.deleteIcon} />
+            <Text style={styles.deleteTitle}>Obrisi primaoca?</Text>
             <Text style={styles.deleteSub}>
-              {sortedRecipients.find(r => r.id === showDelete)?.name || ''} će biti uklonjen iz liste primaoca.
+              {showDelete?.name ?? ''} ce biti uklonjen iz liste primaoca.
             </Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-              <TouchableOpacity style={styles.secBtn} onPress={() => setShowDelete(null)}>
-                <Text style={styles.secBtnText}>Otkaži</Text>
+            {actionError ? <Text style={styles.errText}>{actionError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.secBtn} onPress={() => setShowDelete(null)} disabled={submitting}>
+                <Text style={styles.secBtnText}>Otkazi</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryBtn, { flex: 1, backgroundColor: C.danger }]}
-                onPress={() => handleDelete(showDelete!)}>
-                <Text style={styles.primaryBtnText}>Obriši</Text>
+              <TouchableOpacity style={[styles.primaryBtn, styles.deleteBtn]} onPress={handleDelete} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Obrisi</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -146,14 +219,15 @@ export default function RecipientsScreen({ onBack }: Props) {
 
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  hRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: C.bgCard, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  title: { color: C.textPrimary, fontSize: 20, fontWeight: '700' },
+  flex1Centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { padding: 20 },
   label: { color: C.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 1, marginBottom: 8 },
   inputWrap: { backgroundColor: C.bgInput, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, flexDirection: 'row', alignItems: 'center' },
   input: { flex: 1, color: C.textPrimary, fontSize: 15, padding: 14 },
+  accountHint: { color: C.textMuted, fontSize: 11, marginTop: 6, marginLeft: 4 },
   errText: { color: C.danger, fontSize: 12, marginTop: 4 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.primary, borderRadius: 14, padding: 14, marginBottom: 20, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  inlineError: { color: C.danger, fontSize: 12, marginBottom: 12 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.primary, borderRadius: 14, padding: 14, marginBottom: 20 },
   addText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   emptyWrap: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: C.textMuted, fontSize: 14, marginTop: 12 },
@@ -171,8 +245,11 @@ const styles = StyleSheet.create({
   mSheet: { backgroundColor: C.bgCard, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   mHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   mTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '700' },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 },
   deleteCard: { backgroundColor: C.bgCard, borderRadius: 24, padding: 28, borderWidth: 1, borderColor: C.border },
+  deleteIcon: { alignSelf: 'center', marginBottom: 16 },
   deleteTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
   deleteSub: { color: C.textSecondary, fontSize: 13, textAlign: 'center' },
+  deleteBtn: { flex: 1, backgroundColor: C.danger },
 });

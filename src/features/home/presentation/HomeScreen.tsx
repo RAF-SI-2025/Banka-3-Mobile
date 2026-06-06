@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../../shared/constants/theme';
-import { MOCK_USER } from '../../../shared/data/mockData';
 import { fmt, fmtDateTime } from '../../../shared/utils/formatters';
 import { compareAccountsByCurrencyAndBalance } from '../../../shared/utils/accountOrder';
 import { compareByNameThenAccount } from '../../../shared/utils/recipientOrder';
 import { useAccounts, useExchangeRates, useRecipients, useTransactions } from '../../../shared/hooks/useFeatures';
+import { Client } from '../../../shared/types/models';
 
 interface Props {
+  user: Client | null;
   hasNotif: boolean;
   onOpenAccount: (id: number) => void;
   onShowAllAccounts: () => void;
@@ -17,7 +18,7 @@ interface Props {
   onNavigate: (screen: string) => void;
 }
 
-export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts, onOpenQuickPayment, onOpenTransfer, onNavigate }: Props) {
+export default function HomeScreen({ user, hasNotif, onOpenAccount, onShowAllAccounts, onOpenQuickPayment, onOpenTransfer, onNavigate }: Props) {
   const { state: accountsState } = useAccounts();
   const { state: recipientsState } = useRecipients();
   const { state: ratesState } = useExchangeRates();
@@ -85,7 +86,7 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Dobro dosli</Text>
-          <Text style={styles.name}>{MOCK_USER.firstName} {MOCK_USER.lastName}</Text>
+          <Text style={styles.name}>{user ? `${user.firstName} ${user.lastName}` : 'Klijent'}</Text>
         </View>
         <TouchableOpacity style={styles.bellWrap} onPress={() => onNavigate('verify')}>
           <Ionicons name="notifications-outline" size={22} color={C.textSecondary} />
@@ -188,7 +189,7 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
             <Ionicons name={transaction.amount > 0 ? 'arrow-down' : 'arrow-up'} size={18} color={transaction.amount > 0 ? C.accent : C.danger} />
           </View>
           <View style={styles.flex1}>
-            <Text style={styles.txDesc} numberOfLines={1}>{transaction.description}</Text>
+            <Text style={styles.txDesc} numberOfLines={1}>{getTransactionTitle(transaction)}</Text>
             <Text style={styles.txDate}>{fmtDateTime(transaction.date)}</Text>
           </View>
           <Text style={[styles.txAmt, transaction.amount > 0 && { color: C.accent }]}>
@@ -247,6 +248,10 @@ export default function HomeScreen({ hasNotif, onOpenAccount, onShowAllAccounts,
   );
 }
 
+function getTransactionTitle(transaction: { purpose?: string; description: string; recipientName?: string }) {
+  return transaction.purpose || transaction.description || transaction.recipientName || 'Transakcija';
+}
+
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   content: { padding: 20, paddingBottom: 20 },
@@ -303,5 +308,3 @@ const styles = StyleSheet.create({
   ratePair: { color: C.textSecondary, fontSize: 13, fontWeight: '600' },
   rateValue: { color: C.textPrimary, fontSize: 14, fontWeight: '700' },
 });
-
-

@@ -123,23 +123,13 @@ export default function AccountsScreen({ detailId, onSelect, onBack, onNavigate,
       return;
     }
 
-    if (!isEmployee) {
-      setActionError('Promena limita je trenutno dostupna zaposlenima u portalu.');
-      return;
-    }
-
-    if (!totpCode.trim()) {
-      setActionError('Unesite TOTP kod sa stranice Verifikacija.');
-      return;
-    }
-
     setActionSubmitting(true);
     setActionError(null);
     try {
       await accountActions.updateAccountLimits(selectedAccount.accountNumber, {
         dailyLimit,
         monthlyLimit,
-        totpCode: totpCode.trim(),
+        totpCode: totpCode.trim() || undefined,
       });
       setShowLimitModal(false);
     } catch (error) {
@@ -264,6 +254,9 @@ export default function AccountsScreen({ detailId, onSelect, onBack, onNavigate,
             </View>
             <View style={styles.flex1}>
               <Text style={styles.txDesc} numberOfLines={1}>{transaction.description}</Text>
+              {buildTransactionMeta(transaction) ? (
+                <Text style={styles.txMeta} numberOfLines={2}>{buildTransactionMeta(transaction)}</Text>
+              ) : null}
               <Text style={styles.txDate}>{fmtDateTime(transaction.date)}</Text>
             </View>
             <Text style={[styles.txAmt, transaction.amount > 0 && { color: C.accent }]}>
@@ -524,6 +517,15 @@ function parseTransactionDate(value: string): Date | null {
   return Number.isNaN(isoParsed.getTime()) ? null : isoParsed;
 }
 
+function buildTransactionMeta(transaction: Transaction): string {
+  const parts = [
+    transaction.purpose?.trim(),
+    transaction.paymentCode?.trim() ? `Sifra ${transaction.paymentCode.trim()}` : undefined,
+  ].filter(Boolean);
+
+  return parts.join(' • ');
+}
+
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center' },
@@ -553,6 +555,7 @@ const styles = StyleSheet.create({
   txRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, paddingHorizontal: 14, backgroundColor: C.bgCard, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 6 },
   txIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   txDesc: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
+  txMeta: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
   txDate: { color: C.textMuted, fontSize: 12, marginTop: 2 },
   txAmt: { color: C.textPrimary, fontSize: 14, fontWeight: '600' },
   accountCard: { backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, marginBottom: 10, overflow: 'hidden' },
@@ -580,4 +583,3 @@ const styles = StyleSheet.create({
   modalButtonText: { color: C.textSecondary, fontSize: 15, fontWeight: '600' },
   modalButtonTextPrimary: { color: '#fff' },
 });
-

@@ -51,8 +51,8 @@ export default function PaymentScreen({
   const [totpCode, setTotpCode] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [loadingFreshCode, setLoadingFreshCode] = useState(false);
-  const [infoMessage, setInfoMessage] = useState('');
+  const [requestingCode, setRequestingCode] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [completedStatus, setCompletedStatus] = useState<string | undefined>();
 
   useEffect(() => {
@@ -82,43 +82,12 @@ export default function PaymentScreen({
     onConsumeInitialRecipient?.();
   }, [initialRecipient, onConsumeInitialRecipient, purpose]);
 
-  useEffect(() => {
-    if (step !== 'confirm' || API_CONFIG.USE_MOCK) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadFreshCode = async () => {
-      setLoadingFreshCode(true);
-      setInfoMessage('');
-      try {
-        const result = await container.totpRepository.requestTransactionCode();
-        if (!cancelled) {
-          setTotpCode(result.code);
-          setInfoMessage('Ucitan je svez verification kod sa backend-a.');
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setInfoMessage(e.message ?? 'Neuspesno ucitavanje verification koda.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingFreshCode(false);
-        }
-      }
-    };
-
-    loadFreshCode();
-    return () => {
-      cancelled = true;
-    };
-  }, [step]);
-
   const amountNum = useMemo(() => {
     const parsed = parseFloat(amount.replace(',', '.'));
     return Number.isFinite(parsed) ? parsed : 0;
   }, [amount]);
+
+  const normalizedRecipientAccount = useMemo(() => recipientAccount.replace(/\D/g, ''), [recipientAccount]);
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
@@ -126,6 +95,9 @@ export default function PaymentScreen({
     if (!sourceAccount) nextErrors.source = 'Izaberite račun.';
     if (!recipientName.trim()) nextErrors.recipientName = 'Obavezno polje';
     if (!recipientAccount.trim()) nextErrors.recipientAccount = 'Obavezno polje';
+    if (recipientAccount.trim() && normalizedRecipientAccount.length !== 18) {
+      nextErrors.recipientAccount = 'Broj racuna primaoca mora imati tacno 18 cifara';
+    }
     if (!amount.trim() || amountNum <= 0) nextErrors.amount = 'Unesite validan iznos';
     if (sourceAccount && amountNum > sourceAccount.availableBalance) nextErrors.amount = 'Nedovoljno sredstava';
     if (!purpose.trim()) nextErrors.purpose = 'Obavezno polje';
@@ -142,6 +114,10 @@ export default function PaymentScreen({
 
   const handleConfirm = async () => {
     if (!sourceAccount) return;
+    if (!API_CONFIG.USE_MOCK && !totpCode.trim()) {
+      alert('Prvo unesite ili preuzmite verifikacioni kod.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -154,7 +130,7 @@ export default function PaymentScreen({
         paymentCode: paymentCode.trim(),
         referenceNumber: refNumber.trim(),
         purpose: purpose.trim(),
-        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim(),
+        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim() || undefined,
       });
 
       const refreshedAccounts = await container.accountRepository.getAccounts();
@@ -184,6 +160,20 @@ export default function PaymentScreen({
     setRecipientName(recipient.name);
     setRecipientAccount(recipient.accountNumber);
     setShowRecipients(false);
+  };
+
+  const requestVerificationCode = async () => {
+    setRequestingCode(true);
+    setVerificationMessage('');
+    try {
+      const result = await container.totpRepository.requestTransactionCode('payment');
+      setTotpCode(result.code);
+      setVerificationMessage('Novi kod je preuzet i upisan u polje.');
+    } catch (error) {
+      setVerificationMessage(error instanceof Error ? error.message : 'Neuspesno preuzimanje verifikacionog koda.');
+    } finally {
+      setRequestingCode(false);
+    }
   };
 
   if (accountsState.loading || recipientsState.loading) {
@@ -251,21 +241,25 @@ export default function PaymentScreen({
 
         {!API_CONFIG.USE_MOCK && (
           <>
-            <Text style={styles.label}>TOTP KOD</Text>
+            <Text style={styles.label}>VERIFIKACIONI KOD</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
                 value={totpCode}
                 onChangeText={setTotpCode}
-                placeholder="Unesite 6-cifreni TOTP kod"
+                placeholder="Kod sa stranice Verifikacija"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
                 maxLength={12}
               />
             </View>
             <Text style={styles.confirmNote}>
-              {loadingFreshCode ? 'Ucitavam svez verification kod sa backend-a...' : infoMessage || 'Verification kod se automatski ucitava kada je dostupan.'}
+              Unesite kod sa stranice Verifikacija ili kliknite na dugme ispod da aplikacija preuzme novi kod za placanje.
             </Text>
+            {verificationMessage ? <Text style={styles.confirmNote}>{verificationMessage}</Text> : null}
+            <TouchableOpacity style={styles.secondaryBtn} onPress={requestVerificationCode} activeOpacity={0.8} disabled={requestingCode}>
+              {requestingCode ? <ActivityIndicator color={C.primary} size="small" /> : <Text style={styles.secondaryBtnText}>Preuzmi kod za placanje</Text>}
+            </TouchableOpacity>
           </>
         )}
 
@@ -320,6 +314,7 @@ export default function PaymentScreen({
       <View style={styles.inputWrap}>
         <TextInput style={styles.input} value={recipientAccount} onChangeText={setRecipientAccount} placeholder="333000112345678910" placeholderTextColor={C.textMuted} />
       </View>
+      <Text style={styles.fieldHint}>Unesite tacno 18 cifara. Crtice i razmaci su dozvoljeni.</Text>
       {errors.recipientAccount ? <Text style={styles.errorText}>{errors.recipientAccount}</Text> : null}
 
       <Text style={[styles.label, { marginTop: 16 }]}>IZNOS</Text>

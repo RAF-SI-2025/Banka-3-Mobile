@@ -36,7 +36,9 @@ export default function TotpSetupScreen({ onBack, onTransactionCode }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!transactionCode) return;
+    if (!transactionCode) {
+      return;
+    }
 
     const timer = setInterval(() => {
       const next = Math.max(0, transactionCode.validUntilUnix - Math.floor(Date.now() / 1000));
@@ -52,31 +54,36 @@ export default function TotpSetupScreen({ onBack, onTransactionCode }: Props) {
         <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={20} color={C.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Jednokratni kod za transakcije</Text>
+        <Text style={styles.title}>Pomoc za verifikaciju</Text>
       </View>
 
       <Text style={styles.subtitle}>
-        Backend vraća jednokratni verifikacioni kod preko `/api/totp/transaction-code`. Isti kod se koristi za potvrdu plaćanja, transfera i konverzije.
+        Backend generise jednokratni verifikacioni kod preko `verification/request`, a isti kod se koristi pri potvrdi
+        placanja, prenosa, menjacnice i promena limita.
       </Text>
 
       <View style={styles.card}>
         <View style={styles.infoRow}>
           <Ionicons name="shield-checkmark-outline" size={18} color={C.primary} />
-          <Text style={styles.infoText}>Kod traje 5 minuta, dozvoljena su najviše 3 pokušaja i posle uspešne upotrebe više ne važi.</Text>
+          <Text style={styles.infoText}>
+            Kod vazi nekoliko minuta. Ako ga ne unesete rucno, vecina ekrana moze sama da zatrazi novi kod pre slanja zahteva.
+          </Text>
         </View>
 
         {transactionCode && (
           <>
             <View style={styles.dataBlock}>
-              <Text style={styles.label}>Kod Za Potvrdu</Text>
+              <Text style={styles.label}>Kod za potvrdu</Text>
               <Text style={styles.codeText}>{transactionCode.code}</Text>
             </View>
             <View style={styles.dataBlock}>
-              <Text style={styles.label}>Preostalo Vreme</Text>
-              <Text style={styles.codeText}>{Math.floor(secondsLeft / 60)}:{(secondsLeft % 60).toString().padStart(2, '0')}</Text>
+              <Text style={styles.label}>Preostalo vreme</Text>
+              <Text style={styles.codeText}>
+                {Math.floor(secondsLeft / 60)}:{(secondsLeft % 60).toString().padStart(2, '0')}
+              </Text>
             </View>
             <View style={styles.dataBlock}>
-              <Text style={styles.label}>Maksimalno Pokušaja</Text>
+              <Text style={styles.label}>Maksimalno pokusaja</Text>
               <Text style={styles.codeText}>{transactionCode.maxAttempts}</Text>
             </View>
           </>
@@ -91,7 +98,7 @@ export default function TotpSetupScreen({ onBack, onTransactionCode }: Props) {
       ) : null}
 
       <TouchableOpacity style={[styles.primaryBtn, loading && { opacity: 0.7 }]} onPress={loadCode} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Traži Novi Kod</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Zatrazi novi kod</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>

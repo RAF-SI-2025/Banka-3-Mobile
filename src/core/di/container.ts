@@ -23,6 +23,7 @@ import { ExchangeRepository } from '../../features/exchange/data/ExchangeReposit
 import { LoanRepository } from '../../features/loans/data/LoanRepository';
 import { PaymentRepository } from '../../features/payments/data/PaymentRepository';
 import { TotpRepository } from '../../features/totp/data/TotpRepository';
+import { VerificationRepository } from '../../features/verification/data/VerificationRepository';
 
 class Container {
   private _authRepository?: IAuthRepository;
@@ -54,7 +55,9 @@ class Container {
 
   get verificationRepository(): IVerificationRepository {
     if (!this._verificationRepository) {
-      this._verificationRepository = new MockVerificationRepository();
+      this._verificationRepository = API_CONFIG.USE_MOCK
+        ? new MockVerificationRepository()
+        : new VerificationRepository(apiClient);
     }
     return this._verificationRepository;
   }

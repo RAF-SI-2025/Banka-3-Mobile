@@ -1,18 +1,17 @@
 import { Platform } from 'react-native';
-import { tokenStorage } from '../storage/tokenStorage';
 import { emitSessionInvalidated } from '../auth/sessionEvents';
+import { tokenStorage } from '../storage/tokenStorage';
 
 const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 const envUseMock = process.env.EXPO_PUBLIC_USE_MOCK?.trim().toLowerCase();
 const envApiLogs = process.env.EXPO_PUBLIC_API_LOGS?.trim().toLowerCase();
-const webBaseUrl = 'http://localhost:8081/api';
+const webBaseUrl = 'http://localhost:8080/api';
 const defaultBaseUrl = Platform.OS === 'web' ? webBaseUrl : (envBaseUrl || webBaseUrl);
 
 export const API_CONFIG = {
   BASE_URL: defaultBaseUrl,
   USE_MOCK: envUseMock ? envUseMock === 'true' : false,
   LOG_API: envApiLogs ? envApiLogs === 'true' : false,
-
   TIMEOUT: 10000,
 };
 
@@ -37,12 +36,14 @@ export class NetworkClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+
     if (!skipAuth) {
       const token = await tokenStorage.getAccessToken();
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`;
       }
     }
+
     return headers;
   }
 
@@ -141,7 +142,7 @@ export class NetworkClient {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      let errorMessage = 'Greška na serveru';
+      let errorMessage = 'Greska na serveru';
       try {
         const body = await response.json();
         errorMessage = body.message || body.error || JSON.stringify(body);
@@ -155,7 +156,6 @@ export class NetworkClient {
       throw new ApiError(response.status, errorMessage);
     }
 
-    // Handle empty responses (204 No Content, etc.)
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
       return {} as T;
@@ -166,7 +166,6 @@ export class NetworkClient {
 
   private async handleTokenRefresh(): Promise<string | null> {
     if (this.isRefreshing) {
-      // Another request is already refreshing — wait for it
       return new Promise<string>((resolve, reject) => {
         this.refreshQueue.push({ resolve, reject });
       });
@@ -176,19 +175,21 @@ export class NetworkClient {
 
     try {
       const refreshToken = await tokenStorage.getRefreshToken();
-      if (!refreshToken) throw new Error('No refresh token');
+      if (!refreshToken) {
+        throw new Error('No refresh token');
+      }
 
-      // Call refresh endpoint WITHOUT auth header (use refresh token in body)
       const headers = await this.getHeaders(true);
-      const refreshUrl = this.buildUrl('/api/token/refresh');
+      const refreshUrl = this.buildUrl('/v1/auth/refresh');
       const refreshStartedAt = Date.now();
       let response: Response;
+
       try {
         this.logRequestStart('POST', refreshUrl, true, undefined, true);
         response = await fetch(refreshUrl, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          body: JSON.stringify({ refreshToken, longLivedSession: true }),
         });
       } catch (error) {
         const mappedError = this.mapNetworkError(error);
@@ -212,18 +213,15 @@ export class NetworkClient {
         throw new Error('Refresh response missing access token');
       }
 
-      // Swagger: /token/refresh only returns { access_token }, keep existing refresh token
       await tokenStorage.saveTokens(newAccessToken, newRefreshToken);
       await tokenStorage.saveSessionId(sessionId);
       this.logRequestSuccess('POST', refreshUrl, refreshStartedAt, response.status, true);
 
-      // Resolve all queued requests
       this.refreshQueue.forEach(({ resolve }) => resolve(newAccessToken));
       this.refreshQueue = [];
 
       return newAccessToken;
     } catch (err) {
-      // Reject all queued requests
       this.refreshQueue.forEach(({ reject }) => reject(err));
       this.refreshQueue = [];
       throw err;
@@ -259,7 +257,8 @@ export class NetworkClient {
     const normalized = message.trim().toLowerCase();
     return (
       normalized.includes('verification code') ||
-      normalized.includes('missing verification code')
+      normalized.includes('missing verification code') ||
+      normalized.includes('verifikacioni kod')
     );
   }
 
@@ -292,7 +291,7 @@ export class NetworkClient {
 
     this.logStyled(
       'info',
-      `${isRefresh ? '[refresh] ' : ''}→ ${method} ${this.shortUrl(url)}${hasBody ? ' (body)' : ''}${
+      `${isRefresh ? '[refresh] ' : ''}-> ${method} ${this.shortUrl(url)}${hasBody ? ' (body)' : ''}${
         extraHeaders ? ' (extra headers)' : ''
       }`
     );
@@ -311,7 +310,7 @@ export class NetworkClient {
 
     this.logStyled(
       'success',
-      `${isRefresh ? '[refresh] ' : ''}← ${method} ${this.shortUrl(url)} ${status} (${Date.now() - startedAt} ms)`
+      `${isRefresh ? '[refresh] ' : ''}<- ${method} ${this.shortUrl(url)} ${status} (${Date.now() - startedAt} ms)`
     );
   }
 
@@ -329,7 +328,7 @@ export class NetworkClient {
     const message = error instanceof Error ? error.message : String(error);
     this.logStyled(
       'error',
-      `${isRefresh ? '[refresh] ' : ''}✕ ${method} ${this.shortUrl(url)} (${Date.now() - startedAt} ms) - ${message}`
+      `${isRefresh ? '[refresh] ' : ''}x ${method} ${this.shortUrl(url)} (${Date.now() - startedAt} ms) - ${message}`
     );
   }
 
@@ -338,7 +337,7 @@ export class NetworkClient {
       return;
     }
 
-    this.logStyled('warn', `↻ ${method} ${this.shortUrl(url)} after token refresh`);
+    this.logStyled('warn', `retry ${method} ${this.shortUrl(url)} after token refresh`);
   }
 
   private shortUrl(url: string): string {

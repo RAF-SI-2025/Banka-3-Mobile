@@ -1,9 +1,10 @@
 
 export interface Client {
   id: number;
+  remoteId?: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: number;
+  dateOfBirth: string;
   gender: string;
   email: string;
   phone: string;
@@ -22,8 +23,10 @@ export type AccountStatus = 'active' | 'inactive';
 
 export interface Account {
   id: number;
+  remoteId?: string;
   accountNumber: string;
   ownerId: number;
+  ownerRemoteId?: string;
   ownerName?: string;
   name: string;
   type: AccountType;
@@ -53,15 +56,22 @@ export type TransactionStatus = 'completed' | 'pending' | 'rejected';
 
 export interface Transaction {
   id: number;
+  remoteId?: string;
   accountId: number;
   description: string;
   amount: number;
   currency: string;
   date: string;
   status: TransactionStatus;
+  kind?: string;
+  fromAccountId?: string;
+  toAccountId?: string;
+  fromAccountNumber?: string;
+  toAccountNumber?: string;
   recipientName?: string;
   recipientAccount?: string;
   paymentCode?: string;
+  referenceNumber?: string;
   purpose?: string;
 }
 
@@ -85,11 +95,13 @@ export type CardStatus = 'active' | 'blocked' | 'deactivated';
 
 export interface Card {
   id: number;
+  remoteId?: string;
   cardNumber: string;
   cardName: string;
   cardType: CardType;
   cardBrand: string;
   accountId: number;
+  accountRemoteId?: string;
   accountNumber: string;
   creationDate: string;
   expiresAt: string;
@@ -114,6 +126,7 @@ export type LoanStatus = 'active' | 'paid' | 'defaulted';
 
 export interface Loan {
   id: number;
+  remoteId?: string;
   name: string;
   number: string;
   loanType: string;
@@ -123,6 +136,7 @@ export interface Loan {
   nominalRate: number;
   effectiveRate: number;
   accountId: number;
+  accountRemoteId?: string;
   accountNumber: string;
   agreementDate: string;
   maturityDate: string;
@@ -155,6 +169,7 @@ export interface LoanApplication {
 
 export interface LoanRequest {
   id: number;
+  remoteId?: string;
   loanType: string;
   amount: number;
   currency: string;
@@ -165,6 +180,7 @@ export interface LoanRequest {
   phoneNumber: string;
   repaymentPeriod: number;
   accountNumber: string;
+  accountRemoteId?: string;
   status: string;
   interestRateType: 'fixed' | 'variable' | string;
   submissionDate: string;
@@ -172,6 +188,7 @@ export interface LoanRequest {
 
 export interface PaymentRecipient {
   id: number;
+  remoteId?: string;
   name: string;
   accountNumber: string;
 }

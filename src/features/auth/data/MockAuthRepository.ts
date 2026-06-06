@@ -1,7 +1,6 @@
 /**
  * MOCK AUTH REPOSITORY
  * Implements IAuthRepository with in-memory data.
- * Replace with real HTTP calls when backend is ready.
  */
 
 import { IAuthRepository, LoginParams, LoginResult } from '../domain/IAuthRepository';
@@ -10,9 +9,10 @@ import { tokenStorage } from '../../../core/storage/tokenStorage';
 
 const MOCK_USER: Client = {
   id: 1,
+  remoteId: 'mock-user-1',
   firstName: 'Marko',
-  lastName: 'Petrović',
-  dateOfBirth: 631152000,
+  lastName: 'Petrovic',
+  dateOfBirth: '1990-01-01',
   gender: 'M',
   email: 'marko.petrovic@gmail.com',
   phone: '+381641234567',

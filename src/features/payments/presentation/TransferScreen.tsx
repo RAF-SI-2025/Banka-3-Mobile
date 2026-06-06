@@ -30,9 +30,9 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
   const [showTo, setShowTo] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [error, setError] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
-  const [loadingFreshCode, setLoadingFreshCode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [requestingCode, setRequestingCode] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
   const [completedStatus, setCompletedStatus] = useState<string | undefined>();
 
   const pickPreferredTarget = (source: Account | null, availableAccounts: Account[]) => {
@@ -98,39 +98,6 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
     }
   }, [initialTotpCode]);
 
-  useEffect(() => {
-    if (step !== 'confirm' || API_CONFIG.USE_MOCK) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadFreshCode = async () => {
-      setLoadingFreshCode(true);
-      setInfoMessage('');
-      try {
-        const result = await container.totpRepository.requestTransactionCode();
-        if (!cancelled) {
-          setTotpCode(result.code);
-          setInfoMessage('Ucitan je svez verification kod sa backend-a.');
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setInfoMessage(e.message ?? 'Neuspesno ucitavanje verification koda.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingFreshCode(false);
-        }
-      }
-    };
-
-    loadFreshCode();
-    return () => {
-      cancelled = true;
-    };
-  }, [step]);
-
   const amountNum = useMemo(() => {
     const parsed = parseFloat(amount.replace(',', '.'));
     return Number.isFinite(parsed) ? parsed : 0;
@@ -183,6 +150,10 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
     if (!fromAcc || !toAcc) {
       return;
     }
+    if (!API_CONFIG.USE_MOCK && !totpCode.trim()) {
+      alert('Prvo unesite ili preuzmite verifikacioni kod.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -191,7 +162,7 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
         fromAccountNumber: fromAcc.accountNumber,
         toAccountNumber: toAcc.accountNumber,
         amount: amountNum,
-        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim(),
+        totpCode: API_CONFIG.USE_MOCK ? undefined : totpCode.trim() || undefined,
       });
 
       const refreshedAccounts = await container.accountRepository.getAccounts();
@@ -210,6 +181,20 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
       alert(e.message ?? 'Greška pri prenosu');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const requestVerificationCode = async () => {
+    setRequestingCode(true);
+    setVerificationMessage('');
+    try {
+      const result = await container.totpRepository.requestTransactionCode('transfer');
+      setTotpCode(result.code);
+      setVerificationMessage('Novi kod je preuzet i upisan u polje.');
+    } catch (e: any) {
+      setVerificationMessage(e?.message ?? 'Neuspesno preuzimanje verifikacionog koda.');
+    } finally {
+      setRequestingCode(false);
     }
   };
 
@@ -272,21 +257,25 @@ export default function TransferScreen({ onBack, initialAccountId, onConsumeInit
 
         {!API_CONFIG.USE_MOCK && (
           <>
-            <Text style={styles.label}>TOTP KOD</Text>
+            <Text style={styles.label}>VERIFIKACIONI KOD</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
                 value={totpCode}
                 onChangeText={setTotpCode}
-                placeholder="Unesite 6-cifreni TOTP kod"
+                placeholder="Kod sa stranice Verifikacija"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
                 maxLength={12}
               />
             </View>
             <Text style={styles.confirmNote}>
-              {loadingFreshCode ? 'Ucitavam svez verification kod sa backend-a...' : infoMessage || 'Verification kod se automatski ucitava kada je dostupan.'}
+              Unesite kod sa stranice Verifikacija ili kliknite na dugme ispod da aplikacija preuzme novi kod za prenos.
             </Text>
+            {verificationMessage ? <Text style={styles.confirmNote}>{verificationMessage}</Text> : null}
+            <TouchableOpacity style={styles.secondaryBtn} onPress={requestVerificationCode} disabled={requestingCode}>
+              {requestingCode ? <ActivityIndicator color={C.primary} size="small" /> : <Text style={styles.secondaryBtnText}>Preuzmi kod za prenos</Text>}
+            </TouchableOpacity>
           </>
         )}
 
