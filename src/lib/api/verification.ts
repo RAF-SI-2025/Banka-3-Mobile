@@ -18,6 +18,12 @@ export interface PendingVerification {
   code: string;
   expiresAt: string;
   attemptsRemaining: number;
+  /**
+   * Quick-approve flag (todoSpec S12). True once this device has tapped
+   * "Odobri": the gated web action can then proceed without the code.
+   * Optional so an older gateway that doesn't send it reads as false.
+   */
+  approved?: boolean;
 }
 
 export type VerificationOutcome =
@@ -40,6 +46,16 @@ export async function getPendingVerifications(): Promise<
     "/v1/verification/pending",
   );
   return data.pending ?? [];
+}
+
+// POST /api/v1/verification/{id}/approve — quick-approve (todoSpec S12).
+// Instead of relaying the 6-digit code, the client taps "Odobri" and the
+// phone marks its own pending record approved. The next gated web action
+// then passes verification with X-Verification-Id only. The gateway
+// scopes approval to the caller's own records, so no id but the user's
+// own can be approved.
+export async function approveVerification(id: string): Promise<void> {
+  await api.post(`/v1/verification/${id}/approve`);
 }
 
 // GET /api/v1/verification/history — durable request history (spec
