@@ -26,6 +26,18 @@ export default function AppLayout() {
         name="racuni"
         options={{ title: "Računi", headerShown: false }}
       />
+      <Tabs.Screen
+        name="kartice"
+        options={{ title: "Kartice", headerShown: false }}
+      />
+      <Tabs.Screen
+        name="krediti"
+        options={{ title: "Krediti", headerShown: false }}
+      />
+      <Tabs.Screen
+        name="menjacnica"
+        options={{ title: "Menjačnica", headerShown: false }}
+      />
     </Tabs>
   );
 }
