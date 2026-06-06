@@ -26,6 +26,8 @@ export const keys = {
   },
   rates: {
     all: () => ["rates"] as const,
+    history: (from: string, to: string, days: number) =>
+      ["rates", "history", from, to, days] as const,
   },
   loans: {
     all: () => ["loans"] as const,

@@ -117,6 +117,7 @@ export type { v1ListOTCContractsResponse } from './models/v1ListOTCContractsResp
 export type { v1ListOTCThreadsResponse } from './models/v1ListOTCThreadsResponse';
 export type { v1ListPaymentRecipientsResponse } from './models/v1ListPaymentRecipientsResponse';
 export type { v1ListPublicHoldingsResponse } from './models/v1ListPublicHoldingsResponse';
+export type { v1ListRateHistoryResponse } from './models/v1ListRateHistoryResponse';
 export type { v1ListRatesResponse } from './models/v1ListRatesResponse';
 export type { v1ListRealizedPnLResponse } from './models/v1ListRealizedPnLResponse';
 export type { v1ListSecuritiesResponse } from './models/v1ListSecuritiesResponse';
@@ -149,6 +150,7 @@ export type { v1PublicHoldingItem } from './models/v1PublicHoldingItem';
 export type { v1QuoteExchangeRequest } from './models/v1QuoteExchangeRequest';
 export type { v1QuoteExchangeResponse } from './models/v1QuoteExchangeResponse';
 export type { v1Rate } from './models/v1Rate';
+export type { v1RateHistoryPoint } from './models/v1RateHistoryPoint';
 export type { v1RealizedPnLRow } from './models/v1RealizedPnLRow';
 export type { v1RefreshRequest } from './models/v1RefreshRequest';
 export type { v1RefreshResponse } from './models/v1RefreshResponse';

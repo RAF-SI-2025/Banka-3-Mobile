@@ -1,4 +1,11 @@
-import { FlatList, RefreshControl, Text, View } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  Text,
+  View,
+} from "react-native";
+import { Link } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { listRates } from "@/lib/api/rates";
@@ -56,26 +63,33 @@ export default function KursnaListaScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <Card>
-              <View className="flex-row items-center">
-                <View className="flex-1">
-                  <Text className="text-slate-900 font-medium">
-                    {currencyLabel(item.from)}/{currencyLabel(item.to)}
-                  </Text>
-                  {item.updatedAt ? (
-                    <Text className="text-slate-400 text-xs mt-0.5">
-                      {formatDateTime(item.updatedAt)}
+            <Link
+              href={`/(app)/menjacnica/istorija?from=${item.from}&to=${item.to}`}
+              asChild
+            >
+              <Pressable>
+                <Card>
+                  <View className="flex-row items-center">
+                    <View className="flex-1">
+                      <Text className="text-slate-900 font-medium">
+                        {currencyLabel(item.from)}/{currencyLabel(item.to)}
+                      </Text>
+                      {item.updatedAt ? (
+                        <Text className="text-slate-400 text-xs mt-0.5">
+                          {formatDateTime(item.updatedAt)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text className="w-24 text-right text-slate-900 font-mono">
+                      {formatRate(item.bid)}
                     </Text>
-                  ) : null}
-                </View>
-                <Text className="w-24 text-right text-slate-900 font-mono">
-                  {formatRate(item.bid)}
-                </Text>
-                <Text className="w-24 text-right text-slate-900 font-mono">
-                  {formatRate(item.ask)}
-                </Text>
-              </View>
-            </Card>
+                    <Text className="w-24 text-right text-slate-900 font-mono">
+                      {formatRate(item.ask)}
+                    </Text>
+                  </View>
+                </Card>
+              </Pressable>
+            </Link>
           )}
         />
       )}
