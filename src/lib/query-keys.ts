@@ -18,4 +18,22 @@ export const keys = {
     // Durable request history (spec p.84 "Stranica Verifikacija").
     history: () => ["verification", "history"] as const,
   },
+  cards: {
+    all: () => ["cards"] as const,
+    list: () => ["cards", "list"] as const,
+    transactions: (accountId: string, page: number) =>
+      ["cards", accountId, "transactions", page] as const,
+  },
+  rates: {
+    all: () => ["rates"] as const,
+  },
+  loans: {
+    all: () => ["loans"] as const,
+    list: () => ["loans", "list"] as const,
+    detail: (id: string) => ["loans", "detail", id] as const,
+  },
+  exchange: {
+    quote: (from: string, to: string, amount: string) =>
+      ["exchange", "quote", from, to, amount] as const,
+  },
 } as const;

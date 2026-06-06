@@ -55,3 +55,55 @@ export async function getVerificationHistory(): Promise<
   );
   return data.history ?? [];
 }
+
+// --- Inline-proof flow (spec p.11) -------------------------------------
+// Used by the menjačnica (currency-exchange) screen, the one mutating
+// action in the mobile app's todoSpec scope. The web app drives the
+// identical round-trip via its verification dialog: request a 6-digit
+// code, show it to the user, then attach it to the gated mutation as
+// X-Verification-* headers. For inline-delivery actions (transfer) the
+// gateway returns the code in the request response in dev mode, so the
+// phone can display it directly (same fake-QR substitute the web app
+// uses until the verification is consumed).
+
+export type VerificationKind =
+  | "payment"
+  | "transfer"
+  | "limit_change"
+  | "card_issue";
+
+export interface VerificationProof {
+  id: string;
+  code: string;
+}
+
+export interface IssuedVerification {
+  verificationId: string;
+  /** Present for inline-delivery actions (transfer/payment/limit). */
+  code: string;
+  expiresAt: string;
+  delivery: "inline" | "email";
+}
+
+export async function requestVerification(
+  actionKind: VerificationKind,
+): Promise<IssuedVerification> {
+  const { data } = await api.post<IssuedVerification>(
+    "/v1/verification/request",
+    { actionKind },
+  );
+  return data;
+}
+
+// proofHeaders maps a verification proof to the gateway middleware's
+// expected headers. Empty object when no proof so callers can spread
+// unconditionally.
+export function proofHeaders(
+  proof?: VerificationProof,
+): Record<string, string> {
+  if (!proof) return {};
+  return {
+    "X-Verification-Id": proof.id,
+    "X-Verification-Code": proof.code,
+  };
+}
