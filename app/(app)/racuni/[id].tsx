@@ -43,16 +43,16 @@ export default function AccountDetailScreen() {
   return (
     <Screen>
       <Card>
-        <Text className="text-slate-500 text-xs">{a.number}</Text>
-        <Text className="text-3xl font-bold text-slate-900 mt-1">
+        <Text className="text-slate-500 dark:text-slate-400 text-xs">{a.number}</Text>
+        <Text className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
           {formatMoney(a.availableBalance, a.currency)}
         </Text>
-        <Text className="text-slate-400 text-xs mt-1">
+        <Text className="text-slate-400 dark:text-slate-500 text-xs mt-1">
           Ukupno stanje: {formatMoney(a.balance, a.currency)}
         </Text>
       </Card>
 
-      <Text className="text-slate-700 font-semibold mb-2 mt-1">
+      <Text className="text-slate-700 dark:text-slate-200 font-semibold mb-2 mt-1">
         Transakcije
       </Text>
 
@@ -80,10 +80,10 @@ export default function AccountDetailScreen() {
               <Card>
                 <View className="flex-row justify-between">
                   <View className="flex-1 pr-3">
-                    <Text className="text-slate-900">
+                    <Text className="text-slate-900 dark:text-slate-100">
                       {item.purpose || item.recipientName || "Transakcija"}
                     </Text>
-                    <Text className="text-slate-400 text-xs mt-0.5">
+                    <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
                       {formatDate(item.createdAt)}
                     </Text>
                   </View>

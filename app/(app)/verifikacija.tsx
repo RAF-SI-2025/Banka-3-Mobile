@@ -6,6 +6,7 @@ import {
   approveVerification,
   getPendingVerifications,
   getVerificationHistory,
+  rejectVerification,
   type PendingVerification,
   type VerificationHistoryItem,
   type VerificationOutcome,
@@ -57,7 +58,7 @@ function Countdown({ expiresAt }: { expiresAt: string }) {
   const mm = Math.floor(total / 60);
   const ss = String(total % 60).padStart(2, "0");
   return (
-    <Text className="text-slate-500 text-xs">
+    <Text className="text-slate-500 dark:text-slate-400 text-xs">
       Ističe za {mm}:{ss}
     </Text>
   );
@@ -69,8 +70,8 @@ function HistoryRow({ item }: { item: VerificationHistoryItem }) {
     <Card>
       <View className="flex-row justify-between items-start">
         <View className="flex-1 pr-3">
-          <Text className="text-slate-900 font-medium">{item.action}</Text>
-          <Text className="text-slate-400 text-xs mt-0.5">
+          <Text className="text-slate-900 dark:text-slate-100 font-medium">{item.action}</Text>
+          <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
             {formatDateTime(item.createdAt)}
           </Text>
         </View>
@@ -80,12 +81,14 @@ function HistoryRow({ item }: { item: VerificationHistoryItem }) {
   );
 }
 
-// ActiveRequest renders one pending verification with the quick-approve
-// action (todoSpec S12). Tapping "Odobri" marks the request approved on
-// the backend; the web app's poll-mode dialog then auto-proceeds with
-// the gated action — the client never types the code. The fallback
-// (read the code, type it on the web) stays available: the 6-digit code
-// is still shown until approval.
+// ActiveRequest renders one pending verification with the two spec p.84
+// mode-2 actions: "Odobri" (Confirm) and "Ignoriši" (Ignore). Confirm
+// marks the request approved (todoSpec S12) so the web app's poll-mode
+// dialog auto-proceeds — the client never types the code. Ignore retires
+// the record so the gated web action fails verification, and the request
+// shows up as neuspešno in the history. The fallback (read the code, type
+// it on the web) stays available: the 6-digit code is shown until the
+// user picks an action.
 function ActiveRequest({ item }: { item: PendingVerification }) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -102,34 +105,68 @@ function ActiveRequest({ item }: { item: PendingVerification }) {
       setError(apiError(err, "Odobravanje nije uspelo. Pokušajte ponovo.")),
   });
 
+  const reject = useMutation({
+    mutationFn: () => rejectVerification(item.id),
+    onSuccess: () => {
+      setError(null);
+      // The record is gone server-side; refresh pending (drops this row)
+      // and history (now shows the request as neuspešno).
+      void qc.invalidateQueries({ queryKey: keys.verification.pending() });
+      void qc.invalidateQueries({ queryKey: keys.verification.history() });
+    },
+    onError: (err) =>
+      setError(apiError(err, "Odbijanje nije uspelo. Pokušajte ponovo.")),
+  });
+
   const approved = item.approved || approve.isSuccess;
+  const rejected = reject.isSuccess;
+  const busy = approve.isPending || reject.isPending;
 
   return (
     <Card>
-      <Text className="text-slate-500 text-sm">{item.action}</Text>
-      <Text className="text-4xl font-bold tracking-widest text-slate-900 my-2">
+      <Text className="text-slate-500 dark:text-slate-400 text-sm">{item.action}</Text>
+      <Text className="text-4xl font-bold tracking-widest text-slate-900 dark:text-slate-100 my-2">
         {item.code}
       </Text>
       <View className="flex-row justify-between">
         <Countdown expiresAt={item.expiresAt} />
-        <Text className="text-slate-500 text-xs">
+        <Text className="text-slate-500 dark:text-slate-400 text-xs">
           Preostalo pokušaja: {item.attemptsRemaining}
         </Text>
       </View>
       {approved ? (
         <View className="mt-3">
           <Badge label="Odobreno" tone="success" />
-          <Text className="text-slate-500 text-xs mt-1">
+          <Text className="text-slate-500 dark:text-slate-400 text-xs mt-1">
             Zahtev je odobren. Nastavite na vebu — kod nije potreban.
           </Text>
         </View>
-      ) : (
+      ) : rejected ? (
         <View className="mt-3">
-          <Button
-            label="Odobri"
-            loading={approve.isPending}
-            onPress={() => approve.mutate()}
-          />
+          <Badge label="Odbijeno" tone="danger" />
+          <Text className="text-slate-500 dark:text-slate-400 text-xs mt-1">
+            Zahtev je odbijen. Radnja na vebu neće biti izvršena.
+          </Text>
+        </View>
+      ) : (
+        <View className="mt-3 flex-row gap-2">
+          <View className="flex-1">
+            <Button
+              label="Odobri"
+              loading={approve.isPending}
+              disabled={busy}
+              onPress={() => approve.mutate()}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              label="Ignoriši"
+              variant="danger"
+              loading={reject.isPending}
+              disabled={busy}
+              onPress={() => reject.mutate()}
+            />
+          </View>
         </View>
       )}
       {error && <Text className="text-red-600 text-xs mt-2">{error}</Text>}
@@ -186,7 +223,7 @@ export default function VerifikacijaScreen() {
           <View>
             {activeCodes.length > 0 && (
               <>
-                <Text className="text-slate-700 font-semibold mb-2">
+                <Text className="text-slate-700 dark:text-slate-200 font-semibold mb-2">
                   Aktivni zahtevi
                 </Text>
                 {activeCodes.map((item) => (
@@ -194,11 +231,11 @@ export default function VerifikacijaScreen() {
                 ))}
               </>
             )}
-            <Text className="text-slate-700 font-semibold mb-2 mt-1">
+            <Text className="text-slate-700 dark:text-slate-200 font-semibold mb-2 mt-1">
               Istorija zahteva
             </Text>
             {past.length === 0 && (
-              <Text className="text-slate-500 text-sm mb-2">
+              <Text className="text-slate-500 dark:text-slate-400 text-sm mb-2">
                 Još nema zahteva za verifikaciju.
               </Text>
             )}

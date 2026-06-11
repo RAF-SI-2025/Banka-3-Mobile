@@ -106,23 +106,23 @@ export default function CardDetailScreen() {
       <Card>
         <View className="flex-row justify-between items-start">
           <View className="flex-1 pr-3">
-            <Text className="text-slate-900 font-semibold text-lg">
+            <Text className="text-slate-900 dark:text-slate-100 font-semibold text-lg">
               {card.name || "Kartica"}
             </Text>
-            <Text className="text-slate-500 text-sm mt-1">
+            <Text className="text-slate-500 dark:text-slate-400 text-sm mt-1">
               {brandLabel(card.brand)}
             </Text>
-            <Text className="text-slate-500 text-sm mt-0.5">{card.number}</Text>
+            <Text className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{card.number}</Text>
           </View>
           <Badge label={meta.label} tone={meta.tone} />
         </View>
         {card.cardLimit ? (
-          <Text className="text-slate-400 text-xs mt-3">
+          <Text className="text-slate-400 dark:text-slate-500 text-xs mt-3">
             Limit: {formatMoney(card.cardLimit)}
           </Text>
         ) : null}
         {card.expiresAt ? (
-          <Text className="text-slate-400 text-xs mt-0.5">
+          <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
             Važi do: {formatDate(card.expiresAt)}
           </Text>
         ) : null}
@@ -139,7 +139,7 @@ export default function CardDetailScreen() {
         </View>
       ) : null}
 
-      <Text className="text-slate-700 font-semibold mb-2 mt-1">Transakcije</Text>
+      <Text className="text-slate-700 dark:text-slate-200 font-semibold mb-2 mt-1">Transakcije</Text>
 
       {txQ.isLoading ? (
         <LoadingState />
@@ -162,10 +162,10 @@ export default function CardDetailScreen() {
               <Card>
                 <View className="flex-row justify-between">
                   <View className="flex-1 pr-3">
-                    <Text className="text-slate-900">
+                    <Text className="text-slate-900 dark:text-slate-100">
                       {item.purpose || item.recipientName || "Transakcija"}
                     </Text>
-                    <Text className="text-slate-400 text-xs mt-0.5">
+                    <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
                       {formatDate(item.createdAt)}
                     </Text>
                   </View>

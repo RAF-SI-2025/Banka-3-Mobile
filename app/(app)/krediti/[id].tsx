@@ -53,10 +53,10 @@ export default function LoanDetailScreen() {
       <Card>
         <View className="flex-row justify-between items-start">
           <View className="flex-1 pr-3">
-            <Text className="text-slate-900 font-semibold text-lg">
+            <Text className="text-slate-900 dark:text-slate-100 font-semibold text-lg">
               {loanTypeLabel(loan.loanType)}
             </Text>
-            <Text className="text-slate-500 text-xs mt-0.5">
+            <Text className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
               {loan.loanNumber}
             </Text>
           </View>
@@ -64,29 +64,29 @@ export default function LoanDetailScreen() {
         </View>
 
         <View className="flex-row justify-between mt-4">
-          <Text className="text-slate-500 text-sm">Iznos kredita</Text>
-          <Text className="text-slate-900 text-sm">
+          <Text className="text-slate-500 dark:text-slate-400 text-sm">Iznos kredita</Text>
+          <Text className="text-slate-900 dark:text-slate-100 text-sm">
             {formatMoney(loan.principal, cur)}
           </Text>
         </View>
         <View className="flex-row justify-between mt-1">
-          <Text className="text-slate-500 text-sm">Preostali dug</Text>
-          <Text className="text-slate-900 text-sm font-semibold">
+          <Text className="text-slate-500 dark:text-slate-400 text-sm">Preostali dug</Text>
+          <Text className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
             {formatMoney(loan.remainingPrincipal, cur)}
           </Text>
         </View>
         {loan.effectiveRate ? (
           <View className="flex-row justify-between mt-1">
-            <Text className="text-slate-500 text-sm">Nominalna kamata</Text>
-            <Text className="text-slate-900 text-sm">
+            <Text className="text-slate-500 dark:text-slate-400 text-sm">Nominalna kamata</Text>
+            <Text className="text-slate-900 dark:text-slate-100 text-sm">
               {loan.effectiveRate}%
             </Text>
           </View>
         ) : null}
         {loan.maturesAt ? (
           <View className="flex-row justify-between mt-1">
-            <Text className="text-slate-500 text-sm">Datum dospeća</Text>
-            <Text className="text-slate-900 text-sm">
+            <Text className="text-slate-500 dark:text-slate-400 text-sm">Datum dospeća</Text>
+            <Text className="text-slate-900 dark:text-slate-100 text-sm">
               {formatDate(loan.maturesAt)}
             </Text>
           </View>
@@ -95,19 +95,19 @@ export default function LoanDetailScreen() {
 
       {loan.nextInstallmentAmount ? (
         <Card>
-          <Text className="text-slate-500 text-sm">Sledeća rata</Text>
-          <Text className="text-2xl font-bold text-slate-900 mt-1">
+          <Text className="text-slate-500 dark:text-slate-400 text-sm">Sledeća rata</Text>
+          <Text className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
             {formatMoney(loan.nextInstallmentAmount, cur)}
           </Text>
           {loan.nextInstallmentDate ? (
-            <Text className="text-slate-400 text-xs mt-1">
+            <Text className="text-slate-400 dark:text-slate-500 text-xs mt-1">
               Dospeva: {formatDate(loan.nextInstallmentDate)}
             </Text>
           ) : null}
         </Card>
       ) : null}
 
-      <Text className="text-slate-700 font-semibold mb-2 mt-1">
+      <Text className="text-slate-700 dark:text-slate-200 font-semibold mb-2 mt-1">
         Plan otplate
       </Text>
 
@@ -136,15 +136,15 @@ export default function LoanDetailScreen() {
               <Card>
                 <View className="flex-row justify-between items-start">
                   <View className="flex-1 pr-3">
-                    <Text className="text-slate-900">
+                    <Text className="text-slate-900 dark:text-slate-100">
                       Rata {item.sequenceNumber}
                     </Text>
-                    <Text className="text-slate-400 text-xs mt-0.5">
+                    <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
                       Dospeva: {formatDate(item.expectedDueDate)}
                     </Text>
                   </View>
                   <View className="items-end">
-                    <Text className="text-slate-900 font-semibold">
+                    <Text className="text-slate-900 dark:text-slate-100 font-semibold">
                       {formatMoney(item.amount, currencyLabel(item.currency))}
                     </Text>
                     <View className="mt-1">

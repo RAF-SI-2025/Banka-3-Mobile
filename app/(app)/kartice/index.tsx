@@ -62,17 +62,17 @@ export default function KarticeScreen() {
                   <Card>
                     <View className="flex-row justify-between items-start">
                       <View className="flex-1 pr-3">
-                        <Text className="text-slate-900 font-semibold">
+                        <Text className="text-slate-900 dark:text-slate-100 font-semibold">
                           {item.name || "Kartica"}
                         </Text>
-                        <Text className="text-slate-500 text-xs mt-0.5">
+                        <Text className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                           {brandLabel(item.brand)} · {item.number}
                         </Text>
                       </View>
                       <Badge label={meta.label} tone={meta.tone} />
                     </View>
                     {item.cardLimit ? (
-                      <Text className="text-slate-400 text-xs mt-2">
+                      <Text className="text-slate-400 dark:text-slate-500 text-xs mt-2">
                         Limit: {formatMoney(item.cardLimit)}
                       </Text>
                     ) : null}

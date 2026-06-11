@@ -58,6 +58,15 @@ export async function approveVerification(id: string): Promise<void> {
   await api.post(`/v1/verification/${id}/approve`);
 }
 
+// POST /api/v1/verification/{id}/reject — the "Ignore" action (spec p.84
+// mode 2: the phone offers Confirm AND Ignore). Retires the pending
+// record so the gated web action fails verification, and marks the
+// request unsuccessful in the durable history. Scoped to the caller's
+// own records gateway-side, same as approve.
+export async function rejectVerification(id: string): Promise<void> {
+  await api.post(`/v1/verification/${id}/reject`);
+}
+
 // GET /api/v1/verification/history — durable request history (spec
 // p.84 "Stranica Verifikacija": every request submitted in the
 // client's name, marked successful/unsuccessful). Survives the Redis

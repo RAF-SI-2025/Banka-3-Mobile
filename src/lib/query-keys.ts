@@ -38,4 +38,10 @@ export const keys = {
     quote: (from: string, to: string, amount: string) =>
       ["exchange", "quote", from, to, amount] as const,
   },
+  payments: {
+    all: () => ["payments"] as const,
+  },
+  transfers: {
+    all: () => ["transfers"] as const,
+  },
 } as const;

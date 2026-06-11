@@ -6,14 +6,16 @@ import {
   ActivityIndicator,
   Pressable,
   Text,
+  TextInput,
   View,
   type PressableProps,
+  type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["top", "bottom"]}>
       <View className="flex-1 px-5 pt-2">{children}</View>
     </SafeAreaView>
   );
@@ -21,13 +23,13 @@ export function Screen({ children }: { children: ReactNode }) {
 
 export function Title({ children }: { children: ReactNode }) {
   return (
-    <Text className="text-2xl font-bold text-slate-900 mb-4">{children}</Text>
+    <Text className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-4">{children}</Text>
   );
 }
 
 export function Card({ children }: { children: ReactNode }) {
   return (
-    <View className="bg-white rounded-2xl p-4 mb-3 border border-slate-200">
+    <View className="bg-white dark:bg-slate-900 rounded-2xl p-4 mb-3 border border-slate-200 dark:border-slate-800">
       {children}
     </View>
   );
@@ -41,13 +43,15 @@ export function Button({
 }: PressableProps & {
   label: string;
   loading?: boolean;
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "danger";
 }) {
   const base =
     variant === "primary"
       ? "bg-sky-600 active:bg-sky-700"
-      : "bg-transparent border border-slate-300 active:bg-slate-100";
-  const text = variant === "primary" ? "text-white" : "text-slate-700";
+      : variant === "danger"
+        ? "bg-red-600 active:bg-red-700"
+        : "bg-transparent border border-slate-300 dark:border-slate-700 active:bg-slate-100 dark:active:bg-slate-800";
+  const text = variant === "ghost" ? "text-slate-700 dark:text-slate-200" : "text-white";
   return (
     <Pressable
       className={`rounded-xl py-3 items-center ${base}`}
@@ -55,11 +59,44 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? "#fff" : "#334155"} />
+        <ActivityIndicator color={variant === "ghost" ? "#334155" : "#fff"} />
       ) : (
         <Text className={`font-semibold ${text}`}>{label}</Text>
       )}
     </Pressable>
+  );
+}
+
+// Labeled text input. `hint` renders small helper/validation copy under
+// the field (red when `error`). Forwards all TextInput props.
+export function Field({
+  label,
+  hint,
+  error,
+  ...rest
+}: TextInputProps & {
+  label: string;
+  hint?: string;
+  error?: boolean;
+}) {
+  return (
+    <View className="mb-3">
+      <Text className="text-slate-700 dark:text-slate-200 mb-1 font-medium">{label}</Text>
+      <TextInput
+        className={`border rounded-xl px-4 py-3 bg-white dark:bg-slate-900 ${
+          error ? "border-red-400" : "border-slate-300 dark:border-slate-700"
+        }`}
+        placeholderTextColor="#94a3b8"
+        {...rest}
+      />
+      {hint ? (
+        <Text
+          className={`text-xs mt-1 ${error ? "text-red-600" : "text-slate-400 dark:text-slate-500"}`}
+        >
+          {hint}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -80,7 +117,7 @@ export function LoadingState() {
 export function MessageState({ message }: { message: string }) {
   return (
     <Centered>
-      <Text className="text-center text-slate-500">{message}</Text>
+      <Text className="text-center text-slate-500 dark:text-slate-400">{message}</Text>
     </Centered>
   );
 }
@@ -92,7 +129,7 @@ const badgeTones: Record<BadgeTone, string> = {
   danger: "bg-red-100 text-red-700",
   warning: "bg-amber-100 text-amber-700",
   info: "bg-sky-100 text-sky-700",
-  neutral: "bg-slate-100 text-slate-600",
+  neutral: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
 };
 
 export function Badge({

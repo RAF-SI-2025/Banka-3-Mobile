@@ -51,18 +51,18 @@ export default function RacuniScreen() {
                 <Card>
                   <View className="flex-row justify-between items-start">
                     <View className="flex-1 pr-3">
-                      <Text className="text-slate-900 font-semibold">
+                      <Text className="text-slate-900 dark:text-slate-100 font-semibold">
                         {item.name || "Račun"}
                       </Text>
-                      <Text className="text-slate-500 text-xs mt-0.5">
+                      <Text className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                         {item.number}
                       </Text>
                     </View>
                     <View className="items-end">
-                      <Text className="text-slate-900 font-bold">
+                      <Text className="text-slate-900 dark:text-slate-100 font-bold">
                         {formatMoney(item.availableBalance, item.currency)}
                       </Text>
-                      <Text className="text-slate-400 text-xs mt-0.5">
+                      <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
                         Raspoloživo
                       </Text>
                     </View>

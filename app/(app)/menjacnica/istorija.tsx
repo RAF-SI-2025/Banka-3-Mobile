@@ -53,10 +53,10 @@ export default function KursnaListaIstorijaScreen() {
   return (
     <Screen>
       <Card>
-        <Text className="text-slate-900 font-medium">
+        <Text className="text-slate-900 dark:text-slate-100 font-medium">
           {currencyLabel(from)}/{currencyLabel(to)}
         </Text>
-        <Text className="text-slate-400 text-xs mt-0.5">
+        <Text className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">
           Kurs u zadnjih mesec dana
         </Text>
       </Card>
@@ -75,11 +75,11 @@ export default function KursnaListaIstorijaScreen() {
           }
           ListHeaderComponent={
             <View className="flex-row px-4 mb-1">
-              <Text className="flex-1 text-slate-400 text-xs">Datum</Text>
-              <Text className="w-24 text-right text-slate-400 text-xs">
+              <Text className="flex-1 text-slate-400 dark:text-slate-500 text-xs">Datum</Text>
+              <Text className="w-24 text-right text-slate-400 dark:text-slate-500 text-xs">
                 Kupovni
               </Text>
-              <Text className="w-24 text-right text-slate-400 text-xs">
+              <Text className="w-24 text-right text-slate-400 dark:text-slate-500 text-xs">
                 Prodajni
               </Text>
             </View>
@@ -87,13 +87,13 @@ export default function KursnaListaIstorijaScreen() {
           renderItem={({ item }) => (
             <Card>
               <View className="flex-row items-center">
-                <Text className="flex-1 text-slate-700 text-xs">
+                <Text className="flex-1 text-slate-700 dark:text-slate-200 text-xs">
                   {formatDateTime(item.recordedAt)}
                 </Text>
-                <Text className="w-24 text-right text-slate-900 font-mono">
+                <Text className="w-24 text-right text-slate-900 dark:text-slate-100 font-mono">
                   {formatRate(item.bid)}
                 </Text>
-                <Text className="w-24 text-right text-slate-900 font-mono">
+                <Text className="w-24 text-right text-slate-900 dark:text-slate-100 font-mono">
                   {formatRate(item.ask)}
                 </Text>
               </View>

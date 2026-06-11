@@ -11,8 +11,22 @@ this file is the mobile-specific working memory.
 
 The spec section is one page and listed under *Dodatni poeni*. Mandatory
 core is **verification** (the 2FA companion for web actions, gating
-spec p.11). Chosen optional extra: **view-only** account balance + tx
-history. Initiating payments from the phone is explicitly out of scope.
+spec p.11) — both spec modes: code-display (Option 1) and on-device
+**Confirm/Ignore** (Option 2; "Odobri"/"Ignoriši").
+
+The chosen optional ("Dodatno") extras cover the spec's sanctioned
+"funkcionalnosti iz dela Osnovno poslovanje banke" (Celina 2):
+account + tx overview (Računi), Kartice (+ blokada), Krediti,
+Menjačnica (+ kursna lista / istorija), and the money-out actions
+**Plaćanje** + **Prenos** (both verification-gated). Plus a persisted
+**dark theme** toggle.
+
+**Out of scope by design:** the trading desk (c3/c4 — securities,
+orders, portfolio, funds, OTC, margin) and any employee/admin/
+supervisor portal. The spec scopes the mobile bonus to Celina 2 and
+mandates the app is *namenjena samo Klijentima*, so admin surfaces are
+deliberately excluded (the other teams' apps that ship them go beyond
+spec).
 
 ## Stack (locked)
 
@@ -37,12 +51,19 @@ app/                       # Expo Router file routes
 ├── index.tsx              # auth-status redirect (splash while loading)
 ├── login.tsx              # email + lozinka (RHF + Zod)
 └── (app)/                 # authed group — Tabs == spec p.84 "Meni"
-    ├── _layout.tsx        # auth gate + Tabs
-    ├── index.tsx          # Početna (identity, logout)
-    ├── verifikacija.tsx   # MANDATORY core — poll-first code viewer
-    └── racuni/            # view-only accounts (Stack)
-        ├── index.tsx      # list (sorted by raspoloživo desc, spec p.19)
-        └── [id].tsx       # balance + tx history
+    ├── _layout.tsx        # auth gate + Tabs (dark-aware). Visible tabs:
+    │                      #   Početna, Računi, Plaćanja, Menjačnica,
+    │                      #   Verifikacija. Kartice/Krediti are href:null
+    │                      #   (off the bar, linked from the Početna hub).
+    ├── index.tsx          # Početna hub (identity, menu links, theme, logout)
+    ├── verifikacija.tsx   # MANDATORY core — code viewer + Confirm/Ignore
+    ├── racuni/            # view-only accounts (Stack)
+    ├── kartice/           # cards + blokada + per-card tx (Stack)
+    ├── krediti/           # loans + installments (Stack)
+    ├── menjacnica/        # FX execute + kursna lista + istorija (Stack)
+    └── placanja/          # Stack: menu → novo (plaćanje), prenos
+        ├── novo.tsx       # payment to recipient acct (verification-gated)
+        └── prenos.tsx     # transfer between own accts (verification-gated)
 src/
 ├── lib/
 │   ├── api/               # client.ts (axios+refresh), auth/accounts/

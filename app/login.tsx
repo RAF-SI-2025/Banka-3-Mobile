@@ -43,7 +43,7 @@ export default function LoginScreen() {
     <Screen>
       <View className="flex-1 justify-center">
         <Title>Banka 3</Title>
-        <Text className="text-slate-500 mb-6">Prijava na nalog</Text>
+        <Text className="text-slate-500 dark:text-slate-400 mb-6">Prijava na nalog</Text>
 
         <Field label="Email" error={errors.email?.message}>
           <Controller
@@ -51,7 +51,7 @@ export default function LoginScreen() {
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className="border border-slate-300 rounded-xl px-4 py-3 bg-white"
+                className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900"
                 placeholder="ime@primer.rs"
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -69,7 +69,7 @@ export default function LoginScreen() {
             name="password"
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className="border border-slate-300 rounded-xl px-4 py-3 bg-white"
+                className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900"
                 placeholder="••••••••"
                 secureTextEntry
                 onChangeText={onChange}
@@ -105,7 +105,7 @@ function Field({
 }) {
   return (
     <View className="mb-4">
-      <Text className="text-slate-700 mb-1 font-medium">{label}</Text>
+      <Text className="text-slate-700 dark:text-slate-200 mb-1 font-medium">{label}</Text>
       {children}
       {error ? <Text className="text-red-600 mt-1 text-sm">{error}</Text> : null}
     </View>

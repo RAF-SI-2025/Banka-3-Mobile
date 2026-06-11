@@ -64,10 +64,10 @@ export default function KreditiScreen() {
                   <Card>
                     <View className="flex-row justify-between items-start">
                       <View className="flex-1 pr-3">
-                        <Text className="text-slate-900 font-semibold">
+                        <Text className="text-slate-900 dark:text-slate-100 font-semibold">
                           {loanTypeLabel(item.loanType)}
                         </Text>
-                        <Text className="text-slate-500 text-xs mt-0.5">
+                        <Text className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                           {item.loanNumber}
                         </Text>
                       </View>
@@ -75,22 +75,22 @@ export default function KreditiScreen() {
                     </View>
 
                     <View className="flex-row justify-between mt-3">
-                      <Text className="text-slate-500 text-xs">
+                      <Text className="text-slate-500 dark:text-slate-400 text-xs">
                         Preostali dug
                       </Text>
-                      <Text className="text-slate-900 text-sm font-semibold">
+                      <Text className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
                         {formatMoney(item.remainingPrincipal, cur)}
                       </Text>
                     </View>
                     {item.nextInstallmentAmount ? (
                       <View className="flex-row justify-between mt-1">
-                        <Text className="text-slate-500 text-xs">
+                        <Text className="text-slate-500 dark:text-slate-400 text-xs">
                           Sledeća rata
                           {item.nextInstallmentDate
                             ? ` (${formatDate(item.nextInstallmentDate)})`
                             : ""}
                         </Text>
-                        <Text className="text-slate-900 text-sm font-semibold">
+                        <Text className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
                           {formatMoney(item.nextInstallmentAmount, cur)}
                         </Text>
                       </View>

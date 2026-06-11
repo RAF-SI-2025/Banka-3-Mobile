@@ -11,8 +11,10 @@ import {
 } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useColorScheme } from "nativewind";
 
 import { bootstrapSession } from "@/lib/auth/session";
+import { useThemeStore } from "@/lib/theme/store";
 
 // refetchOnWindowFocus is meaningful on RN only once focusManager is
 // driven by AppState (below) — TanStack Query has no DOM focus event.
@@ -33,6 +35,15 @@ function onAppStateChange(status: AppStateStatus) {
 }
 
 export default function RootLayout() {
+  // Apply the persisted theme preference before first paint of the
+  // authed UI. `colorScheme` (from useColorScheme) reflects the resolved
+  // light/dark so the native StatusBar text can match.
+  const hydrateTheme = useThemeStore((s) => s.hydrate);
+  const { colorScheme } = useColorScheme();
+  useEffect(() => {
+    void hydrateTheme();
+  }, [hydrateTheme]);
+
   // Cold-start session restore (silent refresh with the stored
   // long-lived token). The router gate keys off the resulting status.
   useEffect(() => {
@@ -50,7 +61,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="dark" />
+          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
           <Slot />
         </QueryClientProvider>
       </SafeAreaProvider>
