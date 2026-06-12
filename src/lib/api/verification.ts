@@ -81,15 +81,16 @@ export async function getVerificationHistory(): Promise<
   return data.history ?? [];
 }
 
-// --- Inline-proof flow (spec p.11) -------------------------------------
-// Used by the menjačnica (currency-exchange) screen, the one mutating
-// action in the mobile app's todoSpec scope. The web app drives the
-// identical round-trip via its verification dialog: request a 6-digit
-// code, show it to the user, then attach it to the gated mutation as
-// X-Verification-* headers. For inline-delivery actions (transfer) the
-// gateway returns the code in the request response in dev mode, so the
-// phone can display it directly (same fake-QR substitute the web app
-// uses until the verification is consumed).
+// --- Self-approve proof flow (spec p.11) -------------------------------
+// Used by the mobile app's own money-out screens (Plaćanje / Prenos /
+// Menjačnica). Because the phone IS the second factor, an action started
+// on the phone needs no typed code: the screen requests verification,
+// immediately approves it (approveVerification), and submits the gated
+// mutation with X-Verification-Id only (proofHeaders sends the id alone
+// when the proof has no code). The gateway never returns the 6-digit
+// code in the request response — it lives only on the Verifikacija
+// screen (getPendingVerifications), the companion 2FA flow for the
+// WEB app.
 
 export type VerificationKind =
   | "payment"
@@ -104,10 +105,9 @@ export interface VerificationProof {
 
 export interface IssuedVerification {
   verificationId: string;
-  /** Present for inline-delivery actions (transfer/payment/limit). */
-  code: string;
   expiresAt: string;
-  delivery: "inline" | "email";
+  /** "mobile" (code lives on the phone) or "email" (card issuance). */
+  delivery: "mobile" | "email";
 }
 
 export async function requestVerification(
@@ -122,11 +122,17 @@ export async function requestVerification(
 
 // proofHeaders maps a verification proof to the gateway middleware's
 // expected headers. Empty object when no proof so callers can spread
-// unconditionally.
+// unconditionally. When the proof carries no code (this device
+// self-approved its own request — see approveVerification) only
+// X-Verification-Id is sent: the gateway validates by id against the
+// approved record (the quick-approve path).
 export function proofHeaders(
   proof?: VerificationProof,
 ): Record<string, string> {
   if (!proof) return {};
+  if (!proof.code) {
+    return { "X-Verification-Id": proof.id };
+  }
   return {
     "X-Verification-Id": proof.id,
     "X-Verification-Code": proof.code,

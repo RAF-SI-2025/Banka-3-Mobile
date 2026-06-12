@@ -107,7 +107,14 @@ stored token), identity is filled from the response.
   `verification.ts`.
 - **Spec Option 1**: the phone displays the 6-digit code; the user
   types it back on the web app. Poll-first (`refetchInterval`), no
-  push infra — Expo Push is a possible later upgrade.
+  push infra — Expo Push is a possible later upgrade. As of
+  2026-06-12 this is the **only** path the code travels:
+  `/verification/request` no longer returns it, so the phone
+  (`GET /verification/pending`) is the real second factor for web
+  actions. The app's **own** money-out screens (Plaćanje / Prenos /
+  Menjačnica) self-approve — request → `POST /verification/{id}/approve`
+  → submit with `X-Verification-Id` only (no code to type to itself);
+  `VerifyConfirm` is now a summary, not a code display.
 - **Strings are Serbian**, written inline at call sites.
 - **Money/dates** via `src/lib/format.ts`: `180.000,00 RSD` (amount
   then currency), dates `DD.MM.YYYY`.

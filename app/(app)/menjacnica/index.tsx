@@ -16,6 +16,7 @@ import {
 import { listAccounts } from "@/lib/api/accounts";
 import { quoteExchange, executeExchange } from "@/lib/api/exchange";
 import {
+  approveVerification,
   requestVerification,
   type IssuedVerification,
 } from "@/lib/api/verification";
@@ -82,7 +83,7 @@ export default function MenjacnicaScreen() {
     mutationFn: async (issuedCode: IssuedVerification) => {
       return executeExchange(
         { fromAccountId: fromId, toAccountId: toId, amount },
-        { id: issuedCode.verificationId, code: issuedCode.code },
+        { id: issuedCode.verificationId, code: "" },
       );
     },
     onSuccess: () => {
@@ -94,8 +95,14 @@ export default function MenjacnicaScreen() {
     onError: (err) => setError(apiError(err, "Zamena valuta nije uspela.")),
   });
 
+  // This device is the second factor, so it approves its own request
+  // (no code to type back to itself): request → approve → submit id-only.
   const startVerify = useMutation({
-    mutationFn: () => requestVerification("transfer"),
+    mutationFn: async () => {
+      const issued = await requestVerification("transfer");
+      await approveVerification(issued.verificationId);
+      return issued;
+    },
     onSuccess: (data) => {
       setError(null);
       setIssued(data);
@@ -174,12 +181,9 @@ export default function MenjacnicaScreen() {
         {issued ? (
           <Card>
             <Text className="text-slate-500 dark:text-slate-400 text-sm">
-              Verifikacioni kod (unesite ga ovde da potvrdite)
+              Potvrda na ovom uređaju
             </Text>
-            <Text className="text-4xl font-bold tracking-widest text-slate-900 dark:text-slate-100 my-2">
-              {issued.code}
-            </Text>
-            <Text className="text-slate-400 dark:text-slate-500 text-xs mb-3">
+            <Text className="text-slate-900 dark:text-slate-100 text-base my-2">
               Potvrdom premeštate {formatMoney(amount, currencyLabel(fromAcc?.currency))} u{" "}
               {currencyLabel(toAcc?.currency)}.
             </Text>

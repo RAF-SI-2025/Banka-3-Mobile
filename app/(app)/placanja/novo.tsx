@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listAccounts } from "@/lib/api/accounts";
 import { createPayment } from "@/lib/api/payments";
 import {
+  approveVerification,
   requestVerification,
   type IssuedVerification,
 } from "@/lib/api/verification";
@@ -77,7 +78,7 @@ export default function NovoPlacanjeScreen() {
           referenceNumber: referenceNumber || undefined,
           purpose: purpose || undefined,
         },
-        { id: proof.verificationId, code: proof.code },
+        { id: proof.verificationId, code: "" },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.accounts.all() });
@@ -86,8 +87,14 @@ export default function NovoPlacanjeScreen() {
     onError: (err) => setError(apiError(err, "Plaćanje nije uspelo.")),
   });
 
+  // This device is the second factor, so it approves its own request
+  // (no code to type back to itself): request → approve → submit id-only.
   const startVerify = useMutation({
-    mutationFn: () => requestVerification("payment"),
+    mutationFn: async () => {
+      const issued = await requestVerification("payment");
+      await approveVerification(issued.verificationId);
+      return issued;
+    },
     onSuccess: (data) => {
       setError(null);
       setIssued(data);
@@ -177,7 +184,6 @@ export default function NovoPlacanjeScreen() {
 
         {issued ? (
           <VerifyConfirm
-            code={issued.code}
             summary={`Potvrdom plaćate ${formatMoney(amount, cur)} na račun ${toAccount}.`}
             confirmLabel="Potvrdi plaćanje"
             loading={pay.isPending}

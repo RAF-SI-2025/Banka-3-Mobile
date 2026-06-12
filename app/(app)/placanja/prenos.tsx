@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listAccounts } from "@/lib/api/accounts";
 import { createTransfer } from "@/lib/api/transfers";
 import {
+  approveVerification,
   requestVerification,
   type IssuedVerification,
 } from "@/lib/api/verification";
@@ -76,7 +77,7 @@ export default function PrenosScreen() {
           amount,
           purpose: purpose || undefined,
         },
-        { id: proof.verificationId, code: proof.code },
+        { id: proof.verificationId, code: "" },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.accounts.all() });
@@ -85,8 +86,14 @@ export default function PrenosScreen() {
     onError: (err) => setError(apiError(err, "Prenos nije uspeo.")),
   });
 
+  // This device is the second factor, so it approves its own request
+  // (no code to type back to itself): request → approve → submit id-only.
   const startVerify = useMutation({
-    mutationFn: () => requestVerification("transfer"),
+    mutationFn: async () => {
+      const issued = await requestVerification("transfer");
+      await approveVerification(issued.verificationId);
+      return issued;
+    },
     onSuccess: (data) => {
       setError(null);
       setIssued(data);
@@ -150,7 +157,6 @@ export default function PrenosScreen() {
 
         {issued ? (
           <VerifyConfirm
-            code={issued.code}
             summary={`Potvrdom prenosite ${formatMoney(amount, cur)} na ${toAcc?.number ?? ""}.`}
             confirmLabel="Potvrdi prenos"
             loading={transfer.isPending}
