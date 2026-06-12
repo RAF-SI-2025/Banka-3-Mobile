@@ -1,8 +1,21 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 import { useColorScheme } from "nativewind";
 
 import { useAuthStore } from "@/lib/auth/store";
 import { LoadingState } from "@/components/ui";
+
+// Build a tabBarIcon that swaps between the filled (focused) and the
+// outline (inactive) Ionicons glyph. @expo/vector-icons bundles its
+// fonts into the app automatically, so these render on device (the bar
+// previously fell back to React Navigation's placeholder box because no
+// tabBarIcon was set).
+type IoniconName = keyof typeof Ionicons.glyphMap;
+function tabIcon(active: IoniconName, inactive: IoniconName) {
+  return ({ color, size, focused }: { color: string; size: number; focused: boolean }) => (
+    <Ionicons name={focused ? active : inactive} size={size} color={color} />
+  );
+}
 
 // Authenticated area + the spec p.84 "Meni". The bottom tab bar carries
 // the frequent items — "Verifikacija" is the one mandatory item; Računi,
@@ -31,20 +44,44 @@ export default function AppLayout() {
         headerTintColor: dark ? "#f1f5f9" : "#0f172a",
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Početna" }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Početna",
+          tabBarIcon: tabIcon("home", "home-outline"),
+        }}
+      />
       <Tabs.Screen
         name="racuni"
-        options={{ title: "Računi", headerShown: false }}
+        options={{
+          title: "Računi",
+          headerShown: false,
+          tabBarIcon: tabIcon("wallet", "wallet-outline"),
+        }}
       />
       <Tabs.Screen
         name="placanja"
-        options={{ title: "Plaćanja", headerShown: false }}
+        options={{
+          title: "Plaćanja",
+          headerShown: false,
+          tabBarIcon: tabIcon("paper-plane", "paper-plane-outline"),
+        }}
       />
       <Tabs.Screen
         name="menjacnica"
-        options={{ title: "Menjačnica", headerShown: false }}
+        options={{
+          title: "Menjačnica",
+          headerShown: false,
+          tabBarIcon: tabIcon("swap-horizontal", "swap-horizontal-outline"),
+        }}
       />
-      <Tabs.Screen name="verifikacija" options={{ title: "Verifikacija" }} />
+      <Tabs.Screen
+        name="verifikacija"
+        options={{
+          title: "Verifikacija",
+          tabBarIcon: tabIcon("shield-checkmark", "shield-checkmark-outline"),
+        }}
+      />
       {/* Routable from the Početna hub, hidden from the tab bar. */}
       <Tabs.Screen
         name="kartice"
